@@ -4,30 +4,34 @@
 
 Build, test, and deploy the application described in ideation artifacts. Creates a GitHub repo, writes production-ready code, runs tests, and ships to Vercel via GitHub integration. Fully constrained to the target hosting platform.
 
-## Inputs
+## Context Engine — What Agent Loads
 
-Pulled from S3 at container start:
-- `context/brief.md`
-- `context/platform-constraints.md`
-- `context/ideation/` — all ideation output files (product brief, features, tech stack, etc.)
+**Always loaded by AppForge before agent starts:**
+- `platform-constraints.md` — hosting limits, load before writing a single line of code
+- `index.md` — catalog of all context files (includes ideation artifacts from prior phase)
+- `project-context.md` — full project state: what to build, tech stack + WHY, feature checklist
 
-Injected as env vars:
-- `GITHUB_TOKEN` — for repo creation and commits
-- Platform constraints already in context files
+**Agent pulls on demand (guided by index):**
+- `ideation/tech-stack.md` — stack rationale before writing any code
+- `ideation/features.md` — full feature list to implement
+- `ideation/product-brief.md` — if unclear on product intent during implementation
+- Any other ideation files as needed
 
 ## Execution Flow
 
 ```
-1. Read ideation artifacts → understand what to build
-2. Create GitHub repo via GitHub API (name from project slug)
-3. Scaffold project (e.g. npx create-next-app for Next.js projects)
-4. Implement features from features.md (MVP tier first)
-5. Write tests (unit + integration where applicable)
-6. Run tests — fix failures iteratively
-7. Commit all code to GitHub repo
-8. Vercel auto-deploys via GitHub integration (no manual step needed)
-9. Verify deployment URL is live
-10. Write output artifacts to /tmp/output/
+1. Load Context Engine core files
+2. Pull ideation artifacts needed for implementation plan
+3. Confirm stack is platform-compliant (platform-constraints.md)
+4. Create GitHub repo via GitHub API (name: appforge-{project-slug})
+5. Scaffold project
+6. Implement MVP features from features.md — feature by feature
+7. Write tests (unit + integration, E2E where applicable)
+8. Run tests — iterate on failures (max 3 self-correction rounds)
+9. Commit all code with descriptive commit messages
+10. Vercel auto-deploys via GitHub integration
+11. Verify deployment URL is live
+12. Run Context Engine exit checklist
 ```
 
 ## Platform Compliance
@@ -36,78 +40,87 @@ Before writing any code, agent reads `platform-constraints.md` and confirms:
 - Chosen stack is supported
 - No long-running processes planned
 - Database choice is platform-compatible
-- No out-of-scope services referenced in architecture
+- No out-of-scope services in architecture
 
-If ideation tech-stack.md recommends something incompatible, agent substitutes the nearest compliant alternative and notes the change in `spec.md`.
+If ideation recommends something incompatible, agent substitutes nearest compliant alternative and notes it in `project-context.md` decision log.
 
 ## GitHub Repo Setup
 
-- Repo name: `appforge-{project-slug}` (public or private based on settings)
+- Repo name: `appforge-{project-slug}`
 - Initial commit: scaffolded project
-- Subsequent commits: feature-by-feature (descriptive commit messages)
-- Branch strategy: `main` only for MVP (no PR flow within generation — agent has full control)
+- Subsequent commits: feature-by-feature with descriptive messages
+- Branch strategy: `main` only for MVP (agent has full control, no PR flow)
 
 ## Vercel Deployment
 
-No Vercel CLI or token required. Setup:
-1. User has GitHub integration enabled on their Vercel account (one-time manual step — flagged as blocker if not done)
+1. User has GitHub integration enabled on Vercel (one-time — flagged as blocker if not done)
 2. Agent creates GitHub repo → Vercel auto-detects and creates project
 3. Every push to `main` → auto-deploy
-4. Agent reads deployment URL from Vercel API after push (requires `VERCEL_TOKEN` if reading deploy status)
+4. Agent reads deployment URL from Vercel API after push (requires `VERCEL_TOKEN`)
 
 ## Testing
 
-Agent runs tests inside the container before final commit:
-- Framework-appropriate test runner (Jest, Vitest, Playwright for E2E)
-- If tests fail: agent iterates (max 3 self-correction rounds)
-- If tests still fail after 3 rounds: blocker — surfaces failure context to user
+- Framework-appropriate runner: Jest, Vitest, Playwright for E2E
+- Test failures: agent iterates max 3 rounds
+- Still failing after 3 rounds: blocker — surfaces failure context to user
 - Dev server started locally for E2E tests, killed after tests pass
 
-## Outputs (written to S3)
+## Outputs
+
+Agent decides what files to create. All registered in `index.md`. Typical generation outputs:
 
 ```
-context/generation/
-  spec.md              ← what was built, architecture decisions, deviations from ideation
-  test-report.md       ← test results summary, coverage, any skipped tests
-  deployment.md        ← GitHub repo URL, Vercel deployment URL, env vars required
-  known-issues.md      ← anything deferred, shortcuts taken, tech debt flagged
+generation/
+  spec.md          ← what was built, arch decisions, deviations from ideation plan
+  test-report.md   ← test results, coverage, skipped tests
+  deployment.md    ← GitHub repo URL, Vercel URL, required env vars
+  known-issues.md  ← deferred features, tech debt, shortcuts taken
 ```
+
+Additional files as needed (e.g. `generation/api-design.md` for a complex API, `generation/data-model.md` for a complex schema). Agent decides.
+
+## Context Engine — Exit Checklist
+
+Before container exits:
+1. Append run block to `log.md`
+2. Update `index.md` — register all new files with description + when-to-read
+3. Rewrite `project-context.md`:
+   - Check off features built in Feature Scope
+   - Fill Architecture section
+   - Fill GitHub URL + Deployment URL in Current State
+   - Update Known Issues one-liner in project-context.md → links to known-issues.md
+   - Add decision log entries for substitutions, deferred features, architectural choices
+4. Upload all new/modified files to S3
+5. Update Postgres job status → `complete`
 
 ## Blocker Scenarios
 
 | Blocker | Required input |
 |---------|---------------|
-| GitHub token missing | `GITHUB_TOKEN` |
-| Vercel GitHub integration not set up | User action — link Vercel to GitHub account |
-| Test failures after 3 rounds | User decision — review failure context, decide to proceed or fix |
+| `GITHUB_TOKEN` missing | Re-enter in settings |
+| Vercel GitHub integration not set up | User action — link Vercel to GitHub |
+| Test failures after 3 rounds | User decision — review failure context |
 | Ambiguous feature implementation | User decision — agent presents options |
-| Required external API for core feature (e.g. Stripe) | Relevant API key |
+| External API required for core feature (e.g. Stripe) | Relevant API key |
 
 ## Prompt Template Skeleton
 
 ```
-You are an expert software engineer.
+You are an expert software engineer operating within the AppForge Context Engine.
+
+## Context Engine Instructions
+1. Read platform-constraints.md first — never write code outside these limits
+2. Read index.md — understand what context exists
+3. Read project-context.md — understand what to build, the stack decisions and WHY
+4. Pull additional ideation files as needed (see index for what's available)
+5. Before exiting: append to log.md, update index.md, rewrite project-context.md with deployment URLs + built features checked off
 
 ## Your Task
-Build the application described in the ideation documents. Deploy it to GitHub and Vercel.
+Build the application described in project-context.md. Deploy to GitHub and Vercel.
+Implement MVP features only. Write tests. Commit feature-by-feature.
+Write whatever context files are useful. Cross-link related files.
+Document all deviations from ideation plan in project-context.md decision log.
 
 ## Platform Constraints
-{platform-constraints}
-
-## Ideation Artifacts
-{ideation artifacts injected here}
-
-## Rules
-- Only use technologies listed in platform-constraints.md
-- Implement MVP features from features.md only
-- Write tests for all core functionality
-- Commit feature-by-feature with descriptive messages
-- Document all deviations from ideation in spec.md
-
-## Outputs
-Write to /tmp/output/:
-- spec.md
-- test-report.md
-- deployment.md
-- known-issues.md
+Read platform-constraints.md. Every technology choice must comply.
 ```

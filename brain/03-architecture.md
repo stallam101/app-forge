@@ -49,27 +49,26 @@
 - Secrets: id, key_name, encrypted_value (AES-256)
 - Approval requests: id, project_id, phase, reason, citations, pr_url, status, created_at
 
-### S3 (context + artifact store)
-Structure:
+### S3 (Context Engine store)
+Structure per project — seeded files + agent-created wiki:
 ```
 projects/
   {project-id}/
-    context/
-      brief.md          ← user's original input
-      platform-constraints.md  ← injected at task start
-      ideation/
-        research.md
-        market-analysis.md
-        tech-stack.md
-      generation/
-        spec.md
-        test-report.md
-      maintain/
-        seo-audit-{date}.md
-        incident-{id}.md
+    brief.md                  ← seeded at ticket creation. Immutable.
+    platform-constraints.md   ← seeded at ticket creation. Immutable.
+    project-context.md        ← front page. Rewritten by ideation + generation. Maintained by maintain only on change.
+    index.md                  ← wiki catalog. Agent updates after every write.
+    log.md                    ← append-only audit trail. Agent appends every run.
+    [everything else]         ← agent-created, agent-named, any folder structure the project needs
 ```
 
-All files pulled to container at task start. All new/updated files pushed back on task complete.
+Agents do NOT pull all files at start. Context Engine loading order:
+1. `platform-constraints.md` — always
+2. `index.md` — always (tells agent what exists)
+3. `project-context.md` — always
+4. Additional files — agent pulls selectively based on index
+
+See `08-context-engine.md` for full Context Engine spec.
 
 ## Queue Behavior
 

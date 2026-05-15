@@ -2,115 +2,160 @@
 
 ## Purpose
 
-Keep the deployed application healthy, visible, and improving. Runs on a cron schedule and in response to production incidents. Handles SEO, AEO, performance, security, and production incident response.
+Keep the deployed application healthy, visible, and improving. Runs on a cron schedule and in response to production incidents. Handles SEO, AEO, X posting, performance, security, and incident response.
 
 ## Trigger Types
 
-### 1. Cron (scheduled)
-Runs on a schedule (default: daily). Performs proactive audits.
+### 1. Cron (daily, 9am)
+`0 9 * * *` — proactive audits: SEO crawl, AEO gap check, dependency vulnerabilities, Core Web Vitals.
 
-### 2. Incident (webhook)
-PagerDuty sends webhook to `/api/webhooks/pagerduty` when production breaks. AppForge verifies HMAC signature, creates a maintain job with incident context, queues immediately (skips queue — priority job).
+Also fires immediately after:
+- Every generation deploy
+- Every maintain PR merge
+(post-deploy verification crawl)
 
-## Inputs
+### 2. Incident (PagerDuty webhook — priority)
+PagerDuty hits `/api/webhooks/pagerduty`. AppForge verifies HMAC signature → creates priority job → **skips queue, spins immediately**. Does not wait for active cron runner.
 
-Pulled from S3 at container start:
-- All project context (brief, ideation, generation artifacts)
-- Prior maintain artifacts (all previous audit reports, incident resolutions)
-- `context/platform-constraints.md`
+## Context Engine — What Agent Loads
 
-Injected as env vars:
+**Always loaded by AppForge before agent starts:**
+- `platform-constraints.md` — hosting limits
+- `index.md` — full catalog of all project context files
+- `project-context.md` — current project state, deployment URLs, known issues
+
+**Agent pulls on demand (guided by index — typical for maintain):**
+- `ideation/competitors.md` — for AEO question targeting
+- `ideation/product-brief.md` — for SEO/AEO content accuracy
+- `generation/deployment.md` — GitHub repo URL, Vercel URL
+- `generation/spec.md` — what was built (incident diagnosis)
+- `generation/known-issues.md` — for incident correlation
+- Recent `maintain/incident-*.md` — last 5, for pattern detection
+
+### Injected as env vars
 - `GITHUB_TOKEN`
-- `VERCEL_TOKEN` (for reading deployment status, logs)
-- `PAGERDURY_WEBHOOK_SECRET` (for verification — already done by API route before queue)
+- `VERCEL_TOKEN` — for deployment status + runtime logs
+- `X_API_KEY` — for posting
+- `TRIGGER_TYPE` — `cron` | `incident`
+- `INCIDENT_PAYLOAD` — full PagerDuty JSON (incident trigger only)
 
-Injected as job context (Postgres → env var):
-- `TRIGGER_TYPE` — `cron` or `incident`
-- `INCIDENT_CONTEXT` — PagerDuty payload (if incident trigger)
+## SEO Workflow (cron)
 
-## SEO Workflow
+1. Fetch `/sitemap.xml` from live Vercel URL → get all page URLs
+2. Crawl each URL with Playwright headless — read rendered HTML
+3. Audit per page: meta title, meta description, Open Graph tags, h1/h2 structure, canonical URL, JSON-LD presence
+4. Run PageSpeed Insights API for Core Web Vitals (free, no key needed)
+5. Check `robots.txt` and sitemap validity
+6. Identify keyword opportunities from product-brief + competitor analysis
+7. Generate GitHub PRs for fixes:
+   - Meta tag edits → modify existing components
+   - New content pages (blog, landing) → new `.tsx` files
+   - Sitemap updates → update `sitemap.xml`
+8. Apply auto-merge rules (see below)
+9. Write `maintain/seo-audit-{date}.md`
 
-1. Crawl deployed Vercel URL (Playwright headless)
-2. Audit: meta tags, title tags, Open Graph, page speed (Lighthouse API), mobile-friendliness, sitemap presence, robots.txt
-3. Check Core Web Vitals via Vercel Analytics API or PageSpeed Insights API
-4. Search for keyword ranking opportunities based on product brief + competitor analysis
-5. Generate fixes as GitHub PRs:
-   - Meta tag updates → PR against `main`
-   - New blog/landing page content → PR with new files
-   - Sitemap updates → PR
-6. Confidence check per PR (see auto-merge rules below)
+## AEO Workflow (cron)
 
-## AEO Workflow
+AEO = optimizing for AI search engines (Perplexity, ChatGPT, Google AI Overviews). These systems cite pages that directly answer questions.
 
-1. Audit existing structured data (JSON-LD) on deployed site
-2. Identify missing schema types relevant to the product (FAQ, Product, Organization, BreadcrumbList)
-3. Generate FAQ content targeting questions people ask AI assistants about this product category
-4. Generate/update JSON-LD schema markup
-5. Open GitHub PRs with changes
-6. Apply confidence rules for auto-merge
+1. Read product-brief + competitors — understand the product category
+2. Generate top 20 questions a user would ask an AI assistant about this product category
+3. Check if existing site pages answer each question (Playwright crawl)
+4. For gaps: generate FAQ page content (`.tsx`) + JSON-LD FAQ schema markup
+5. Open GitHub PR with new FAQ page → auto-merges (additive, content only)
+6. Write `maintain/aeo-audit-{date}.md`
+
+**FAQ pages live on the deployed app** — not external platforms. AI search engines crawl and cite them as authoritative answers.
+
+## X Posting (cron + event-driven)
+
+Agent drafts and posts to X using `X_API_KEY`. Always goes through approval gate — agent drafts, user reviews, user approves, agent posts.
+
+Use cases:
+- New feature shipped → announce it
+- New blog/FAQ content published → share it
+- Product milestone → post it
+
+Agent drafts copy, links the approval request with preview. User approves → agent fires the post via X API.
+
+Reddit: out of scope (bot accounts get shadowbanned — not worth the risk).
 
 ## Production Incident Workflow (webhook trigger)
 
-1. Receive PagerDuty context (error message, stack trace, affected service, timestamp)
-2. Pull relevant generation artifacts (deployment.md, spec.md, known-issues.md)
-3. Pull recent incident history from S3 maintain artifacts
-4. Diagnose: correlate error with known code, recent deployments, known issues
-5. Attempt fix: write code change, commit to GitHub as PR
-6. If fix is high-confidence (touches ≤3 files, no logic changes, matches known issue pattern) → auto-merge
-7. If fix is uncertain → approval request with full diagnosis + PR link
-8. Write incident report to S3: `context/maintain/incident-{id}.md`
+**Priority job — skips queue, spins immediately.**
+
+1. Receive PagerDuty payload: error message, stack trace, affected service, timestamp
+2. Pull Vercel runtime logs via Vercel API for the affected deployment
+3. Load `generation/spec.md`, `generation/known-issues.md`, recent `maintain/incident-*.md`
+4. Diagnose: correlate error across PagerDuty payload + Vercel logs + known issues + spec
+5. Attempt fix: write code change as GitHub PR
+6. All incident fixes → approval request regardless of confidence (never auto-merge incidents)
+7. Approval request includes: full diagnosis, PagerDuty context, Vercel log excerpts, PR link, recommended action
+8. Write `maintain/incident-{id}.md`
 
 ## Performance & Security (cron)
 
-- Check Vercel deployment for dependency vulnerabilities (`npm audit`)
-- Open PRs for patch-version dependency updates (auto-merge)
-- Flag major/minor version updates for approval
-- Monitor for new CVEs affecting the tech stack
+- `npm audit` on deployed repo → flag vulnerabilities
+- Patch-version dep bumps → auto-merge PR
+- Major/minor dep bumps → approval request
+- Core Web Vitals regression from PageSpeed → flag for investigation
 
 ## Auto-Merge Rules (rule-based, not LLM-scored)
 
-**Auto-merge if ALL of the following:**
-- Change is purely additive (no file deletions, no line deletions in logic files)
-- Touches only whitelisted file types: HTML meta tags, `sitemap.xml`, `robots.txt`, JSON-LD in designated schema files, `package.json` patch-version bumps
+**Auto-merge if ALL:**
+- Purely additive (no deletions in logic files)
+- Touches only: meta tags, `sitemap.xml`, `robots.txt`, JSON-LD schema files, new content `.tsx` files, `package.json` patch bumps
 - PR passes all CI checks
-- Change touches ≤5 files
+- ≤5 files touched
 
-**Flag for approval if ANY of the following:**
-- Deletes or modifies existing logic
-- Touches source code files (`.ts`, `.tsx`, `.js`, `.jsx`)
-- Changes database schema
-- Is a major or minor dependency version bump
-- PR CI checks fail
-- Incident fix (all incident fixes go to approval regardless of other rules)
+**Flag for approval if ANY:**
+- Modifies or deletes existing logic
+- Touches `.ts`/`.tsx`/`.js`/`.jsx` source files (beyond new content pages)
+- Database schema change
+- Major/minor dep version bump
+- CI checks fail
+- Incident fix (always, no exceptions)
 
 ## Approval Requests
 
-All flagged items appear in the Approvals page with:
-- Plain-English summary of what the agent wants to do
-- Full reasoning with citations (links to sources, Lighthouse report, PagerDuty alert, etc.)
-- GitHub PR link
-- Diff preview
+All flagged items → Approvals page:
+- Plain-English summary of what agent wants to do
+- Full reasoning with citations (Lighthouse report, PagerDuty alert, Vercel log excerpts, source URLs)
+- GitHub PR link + diff preview
 - Approve / Reject
+
+## Context Engine — Exit Checklist
+
+Before container exits:
+1. Append run block to `log.md` — always, every run
+2. Update `index.md` — register any new maintain artifact files
+3. Rewrite `project-context.md` — **only if something changed:**
+   - Known Issues resolved or new ones found → update
+   - Fix deployed → update Last deploy date + Decision Log
+   - Scope change → update relevant sections
+   - SEO/AEO cron with no structural changes → do NOT touch project-context.md
+4. Upload all new/modified files to S3
+5. Update Postgres job status → `complete`
 
 ## Outputs (written to S3)
 
 ```
-context/maintain/
-  seo-audit-{YYYY-MM-DD}.md      ← findings + actions taken
-  aeo-audit-{YYYY-MM-DD}.md      ← schema gaps + content generated
-  incident-{incident-id}.md      ← diagnosis, fix, resolution status
-  performance-{YYYY-MM-DD}.md    ← Core Web Vitals, dep vulnerabilities
+maintain/
+  seo-audit-{YYYY-MM-DD}.md
+  aeo-audit-{YYYY-MM-DD}.md
+  incident-{pagerduty-id}.md
+  performance-{YYYY-MM-DD}.md
+  x-posts-{YYYY-MM-DD}.md    ← log of approved + posted X content
 ```
+
+`project-context.md` updated only when something in it changes: Known Issues (incident resolved or new one found), Last deploy date (after a fix lands), Decision Log (significant architectural change). SEO/AEO cron runs that produce no structural changes do not touch `project-context.md`. `log.md` is appended on every run regardless.
 
 ## Blocker Scenarios
 
 | Blocker | Required input |
 |---------|---------------|
-| GitHub token missing or expired | `GITHUB_TOKEN` |
-| Vercel token missing | `VERCEL_TOKEN` |
-| Incident cause unclear after analysis | User decision — agent presents diagnosis options |
-| New major dependency update with breaking changes | User decision |
-
-## Cron Schedule (configurable in settings)
-
-Default: `0 9 * * *` (9am daily). Managed via Vercel Cron (since AppForge itself runs on Vercel) — hits `/api/cron/maintain` which queues maintain jobs for all active projects in Maintain phase.
+| `GITHUB_TOKEN` missing/expired | Re-enter in settings |
+| `VERCEL_TOKEN` missing | Re-enter in settings |
+| `X_API_KEY` missing | Re-enter in settings |
+| Incident cause unclear after full diagnosis | User decision — agent presents options with evidence |
+| Major dep breaking change | User decision |

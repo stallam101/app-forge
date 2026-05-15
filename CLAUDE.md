@@ -15,6 +15,7 @@ Brain doc locations:
 - `brain/05-phase-ideation.md` — ideation agent
 - `brain/06-phase-generation.md` — generation agent
 - `brain/07-phase-maintain.md` — maintain agent
+- `brain/08-context-engine.md` — Context Engine: wiki-based context system powering all agents (read before touching agent prompts or S3 structure)
 
 
 ## Agent Workflow

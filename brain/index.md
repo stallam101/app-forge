@@ -13,6 +13,7 @@ Read this file first. Follow links to relevant docs before starting any task.
 | [05-phase-ideation.md](./05-phase-ideation.md) | Ideation agent — inputs, outputs, research flow |
 | [06-phase-generation.md](./06-phase-generation.md) | Generation agent — code, GitHub, Vercel, constraints |
 | [07-phase-maintain.md](./07-phase-maintain.md) | Maintain agent — SEO, AEO, incidents, cron, confidence |
+| [08-context-engine.md](./08-context-engine.md) | Context Engine — wiki-based context system powering all agents |
 
 ## Key Decisions (locked)
 

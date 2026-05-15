@@ -50,9 +50,12 @@ created_at  timestamptz default now()
       - Environment vars: PROJECT_ID, JOB_ID, AWS_S3_BUCKET, [decrypted secrets]
       - ECS task gets a /tmp volume for working files
 5. Container starts:
-   a. Downloads all project MD files from S3 to /tmp/context/
-   b. Writes platform-constraints.md to /tmp/context/
-   c. Invokes OpenClaw CLI with task prompt + context path
+   a. Downloads Context Engine core files from S3 to /tmp/context/:
+      - platform-constraints.md
+      - index.md
+      - project-context.md
+   b. Invokes OpenClaw CLI with task prompt + context path
+   c. OpenClaw reads index.md, pulls additional files it needs from S3 on demand
    d. Streams OpenClaw stdout → writes to job_logs via Postgres connection
 6. OpenClaw runs autonomously:
    a. Hits blocker → writes BLOCKED record to job_logs, exits with code 2
@@ -69,12 +72,13 @@ created_at  timestamptz default now()
 
 Each phase has a task prompt template. The BullMQ worker builds the prompt by:
 1. Reading the phase prompt template
-2. Injecting project context (brief, prior phase artifacts summary)
-3. Injecting platform constraints
-4. Passing to OpenClaw: `openclaw run --prompt-file /tmp/prompt.md --context-dir /tmp/context/`
+2. Injecting phase type + project ID
+3. Passing to OpenClaw: `openclaw run --prompt-file /tmp/prompt.md --context-dir /tmp/context/`
 
-OpenClaw handles: LLM calls, tool use, retries, multi-step execution.
-AppForge handles: context loading, secret injection, artifact persistence, status streaming.
+OpenClaw handles: LLM calls, tool use, retries, multi-step execution, selective file pulls from S3.
+AppForge handles: seeding core context files, secret injection, artifact persistence, status streaming.
+
+Context Engine instructions are baked into every phase prompt — agent knows to read index.md first, pull files selectively, update index + log on exit, rewrite project-context.md only if something changed.
 
 ## Blocker Protocol
 
