@@ -34,7 +34,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<Pa
   }
 
   if (project.status === "GENERATION") {
-    return <GenerationView projectName={project.name} />
+    return renderGeneration(project)
   }
 
   if (project.status === "MAINTAIN") {
@@ -143,6 +143,28 @@ async function renderResearch(project: ProjectWithMessages) {
       initialJobStatus={(job?.status as JobStatus | undefined) ?? null}
       initialEvents={initialEvents}
       initialFiles={initialFiles}
+    />
+  )
+}
+
+async function renderGeneration(project: ProjectWithMessages) {
+  const [job, ghSetting] = await Promise.all([
+    db.job.findFirst({
+      where: { projectId: project.id, phase: "GENERATION" },
+      orderBy: { createdAt: "desc" },
+      include: { events: { orderBy: { createdAt: "desc" }, take: 1 } },
+    }),
+    db.setting.findUnique({ where: { key: "GITHUB_TOKEN" } }),
+  ])
+
+  return (
+    <GenerationView
+      projectId={project.id}
+      projectName={project.name}
+      jobId={job?.id ?? null}
+      jobStatus={(job?.status ?? null) as import("@/types").JobStatus | null}
+      errorMessage={job?.events[0]?.message}
+      hasGithubToken={!!ghSetting}
     />
   )
 }
