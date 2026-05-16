@@ -6,120 +6,178 @@ Agent progress streams to the UI via Server-Sent Events.
 
 ### Flow
 ```
-ECS Container
-  → writes status update row to Postgres (job_logs table)
-  → Next.js SSE endpoint polls job_logs for new rows
-  → streams log lines to browser
-  → kanban card updates in real-time
+ECS Agent Container
+  → POSTs progress event to /api/jobs/{jobId}/events (bearer token auth)
+  → API route inserts JobEvent row in Postgres
+  → Browser SSE connection (GET /api/jobs/{jobId}/stream) polls JobEvent table
+  → Streams new events to browser as SSE messages
+  → Kanban card updates in real-time
 ```
 
 ### Why SSE over WebSockets
 - SSE is unidirectional (server → client) — fits the use case exactly
 - Native browser support, no library needed
 - Works over HTTP/2, handles reconnection automatically
-- WebSockets needed only for bidirectional real-time (not required here)
 
 ### SSE Endpoint
-`GET /api/projects/[id]/stream`
-- Opens SSE connection scoped to a project
-- Streams: job status changes, log lines, blocker events, completion events
-- Client reconnects automatically on drop (SSE spec)
+`GET /api/jobs/[jobId]/stream`
+- ReadableStream that polls `JobEvent` table every 1.5s for rows with `id > lastEventId`
+- Closes stream on `complete` or `error` event type, or client disconnect
+- Auth: JWT cookie (standard user auth, not job token)
 
-### job_logs table
-```sql
-id          uuid primary key
-project_id  uuid references projects(id)
-job_id      uuid references phase_jobs(id)
-phase       text
-level       text  -- 'info' | 'warn' | 'error' | 'blocker' | 'complete'
+### Agent Callback
+`POST /api/jobs/[jobId]/events`
+- Agent sends: `{ type, message, metadata }` with `Authorization: Bearer {JOB_TOKEN}`
+- `JOB_TOKEN` is a unique CUID stored on the `Job` row, injected into ECS task env vars at launch
+- On `complete`: updates `Job.status = 'COMPLETE'`
+- On `error`: updates `Job.status = 'FAILED'`
+- On `blocker`: updates `Job.status = 'BLOCKED'`
+
+### Progress Reporting — Agentic
+
+Agent narrates its own progress using bash MCP to curl the callback URL before each major step. No deterministic checkpoints — Nemotron decides when to report.
+
+Prompt instruction baked into every phase:
+```bash
+# Before each major step:
+curl -s -X POST "$APPFORGE_CALLBACK_URL/api/jobs/$JOB_ID/events" \
+  -H "Authorization: Bearer $JOB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"type\":\"progress\",\"message\":\"Scanning Reddit for freelancer pain points...\"}"
+```
+
+Event types:
+- `progress` — narrative update, shown on kanban card activity line
+- `blocker` — hard stopper, agent exits, card turns red
+- `approval_request` — agent pauses, creates Approval row, waits for user
+- `complete` — phase done, card moves to awaiting approval
+- `error` — unrecoverable failure
+
+### JobEvent Table
+```
+id          cuid primary key
+jobId       cuid → Job
+type        enum: progress | blocker | approval_request | complete | error
 message     text
-created_at  timestamptz default now()
+metadata    json? (e.g. PR URL, required key name, approval details)
+createdAt   timestamptz
 ```
 
-## Ideation Turn Lifecycle (per user message)
+## Ticket Creation Conversation (per user message)
 
-Ideation differs from the other phases — each user message spins a fresh container for one reply. See `05-phase-ideation.md` for full conversation flow.
-
-```
-1. User types in Chat Panel, clicks Send
-2. POST /api/projects/[id]/ideation/message
-   a. Append user message to ideation_messages (Postgres)
-   b. Re-serialize full conversation → ideation/conversation.md in S3
-   c. Enqueue ideation-turn job in BullMQ (linked to the open phase_job row)
-   d. Flip phase_job.status: awaiting_message → running
-3. BullMQ worker triggers ECS RunTask (ideation task definition)
-4. Container runs one turn (research + reply), writes files, exits
-5. Worker reads agent reply from job_logs (structured event), appends to ideation_messages
-6. AppForge re-serializes conversation.md (now includes new reply)
-7. phase_job.status → awaiting_message (until next user message or finalization)
-8. SSE pushes agent_reply event → chat panel renders message + file chips
-
-On finalization turn:
-- Container writes the full artifact set, rewrites project-context.md
-- Exits with a `finalize` event in job_logs
-- phase_job.status → complete → card moves to `awaiting approval`
-```
-
-Generation and Maintain follow the autonomous one-shot lifecycle below.
-
-## Container Lifecycle (detailed)
+Ticket creation chat uses **Vercel AI SDK + Sonnet** directly in a Next.js API route. No ECS container per turn.
 
 ```
-1. User moves project to phase (or phase completes + user approves next)
-2. API route creates phase_job record (status: 'queued'), adds to BullMQ queue
-3. BullMQ worker picks up job
-4. Worker:
-   a. Fetches project context file list from S3
-   b. Decrypts required secrets from Postgres
-   c. Triggers ECS RunTask with:
-      - Task definition for phase (ideation|generation|maintain)
-      - Environment vars: PROJECT_ID, JOB_ID, AWS_S3_BUCKET, [decrypted secrets]
-      - ECS task gets a /tmp volume for working files
-5. Container starts:
-   a. Downloads Context Engine core files from S3 to /tmp/context/:
-      - platform-constraints.md
-      - index.md
-      - project-context.md
-   b. Invokes OpenClaw CLI with task prompt + context path
-   c. OpenClaw reads index.md, pulls additional files it needs from S3 on demand
-   d. Streams OpenClaw stdout → writes to job_logs via Postgres connection
-6. OpenClaw runs autonomously:
-   a. Hits blocker → writes BLOCKED record to job_logs, exits with code 2
-   b. Completes → writes artifacts to /tmp/output/
-7. Container shutdown hook:
-   a. If exit code 0: uploads /tmp/output/ to S3, updates job status 'complete'
-   b. If exit code 2 (blocker): updates job status 'blocked', no S3 upload
-   c. If exit code 1 (error): updates job status 'failed', uploads logs
-8. BullMQ worker receives task completion signal via ECS EventBridge
-9. SSE stream notifies browser of final status
+1. User types in Chat Panel, clicks Send (or first turn auto-fires on page load)
+2. POST /api/projects/[id]/chat
+   a. Load existing messages from Postgres (Message table)
+   b. Save new user message to Message table
+   c. streamText({ model: claude-sonnet-4-6, messages, system: ticket-creation-prompt })
+   d. Stream response to browser via result.toDataStreamResponse()
+   e. Save assistant reply to Message table after stream completes
+3. Browser renders streamed message via useChat hook (ai/react)
+4. Context panel polls GET /api/projects/[id]/context-files every 3s
 ```
 
-## OpenClaw CLI Integration
+No BullMQ, no ECS, no queue for conversation turns. Conversation is live server-side streaming.
 
-Each phase has a task prompt template. The BullMQ worker builds the prompt by:
-1. Reading the phase prompt template
-2. Injecting phase type + project ID
-3. Passing to OpenClaw: `openclaw run --prompt-file /tmp/prompt.md --context-dir /tmp/context/`
+On "Create Ticket": enqueues a `TICKET_CONTEXT_BUILD` job in Postgres → Vercel Cron picks it up → ECS task runs Nemotron via OpenClaw.
 
-OpenClaw handles: LLM calls, tool use, retries, multi-step execution, selective file pulls from S3.
-AppForge handles: seeding core context files, secret injection, artifact persistence, status streaming.
+## Container Lifecycle (autonomous phases)
 
-Context Engine instructions are baked into every phase prompt — agent knows to read index.md first, pull files selectively, update index + log on exit, rewrite project-context.md only if something changed.
+```
+1. User moves project to phase (drag card or approve)
+2. POST /api/projects/[id]/phase
+   a. Creates Job row (status: QUEUED, phase: RESEARCH|GENERATION|MAINTAIN_*)
+   b. Updates Project.status
+3. Vercel Cron hits /api/cron/queue-poller every 60s
+4. Poller: for each phase, if no RUNNING job exists, find oldest QUEUED job
+5. API route (launchECSTask):
+   a. Load Job + Project from Postgres
+   b. Decrypt all Setting rows (AES-256)
+   c. Read phase config from configs/openclaw/{phase}.json
+   d. Read prompt template from configs/prompts/{phase}.md, inject PROJECT_ID, S3_PREFIX, JOB_ID
+   e. ECS RunTask:
+      - Single task definition (all phases share one image)
+      - launchType: FARGATE
+      - Environment vars: JOB_ID, PROJECT_ID, JOB_TOKEN, S3_PREFIX, OPENCLAW_CONFIG (JSON string),
+        AGENT_PROMPT, APPFORGE_CALLBACK_URL, all decrypted secrets
+   f. Update Job.status = RUNNING, Job.ecsTaskArn
+6. Container starts (entrypoint.sh):
+   a. Writes $OPENCLAW_CONFIG to /workspace/openclaw.json
+   b. Writes $AGENT_PROMPT to /workspace/prompt.md
+   c. Runs: openclaw --config /workspace/openclaw.json --prompt /workspace/prompt.md
+7. OpenClaw runs autonomously:
+   a. Uses S3 MCP server to read context files (platform-constraints.md → index.md → project-context.md → selective)
+   b. POSTs progress events to $APPFORGE_CALLBACK_URL/api/jobs/$JOB_ID/events with Bearer $JOB_TOKEN
+   c. Writes output files via S3 MCP server
+   d. On blocker: POSTs { type: "blocker", message, metadata: { required: "key_name" } }, then exits
+   e. On complete: POSTs { type: "complete", message }, then exits
+8. SSE pushes events to browser in real-time
+```
+
+## OpenClaw MCP Tool Configuration
+
+Phase config is a JSON5 file (`configs/openclaw/{phase}.json`) injected via `OPENCLAW_CONFIG` env var. The Docker image has all MCP servers pre-installed; the config determines which are active.
+
+Model config for all phases:
+```json5
+model: {
+  provider: "openai-completions",
+  baseUrl: "https://integrate.api.nvidia.com/v1",
+  apiKey: "${NVIDIA_API_KEY}",
+  model: "nvidia/nemotron-3-super-120b-a12b",
+}
+```
+
+MCP server examples:
+```json5
+mcpServers: {
+  s3: {
+    command: "npx",
+    args: ["-y", "mcp-s3"],
+    env: {
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}",
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}",
+      AWS_REGION: "${AWS_REGION}",
+      S3_BUCKET: "${S3_BUCKET_NAME}",
+    }
+  },
+  github: {
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-github"],
+    env: { GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}" }
+  },
+  playwright: {
+    command: "npx",
+    args: ["-y", "@executeautomation/mcp-playwright"],
+    env: { PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright" }
+  },
+  bash: {
+    command: "npx",
+    args: ["-y", "mcp-bash"]
+  },
+  tavily: {
+    command: "npx",
+    args: ["-y", "tavily-search-mcp"],
+    env: { TAVILY_API_KEY: "${TAVILY_API_KEY}" }
+  }
+}
+```
 
 ## Blocker Protocol
 
-When OpenClaw determines it cannot proceed without user input:
-1. Writes structured JSON to stdout: `{"type":"blocker","reason":"...","required":"api_key|decision|oauth","key_name":"REDDIT_API_KEY"}`
-2. Container exits with code 2
-3. AppForge parses blocker payload, creates blocker record in Postgres
+When OpenClaw hits a hard stopper:
+1. POSTs `{ type: "blocker", message: "...", metadata: { required: "REDDIT_API_KEY" } }` to callback URL
+2. Container exits
+3. API route updates `Job.status = 'BLOCKED'`
 4. SSE pushes blocker event to browser
-5. Kanban card turns red
-6. Browser push notification fires
+5. Kanban card turns red (`border-[#ef4444]`)
 
 On user resolution:
-1. User submits resolution via blocker modal (enters API key, makes decision, etc.)
-2. API route stores new secret (if applicable), updates job record with resolution context
-3. Job re-queued — new container starts with resolution context in env / context files
+1. User enters missing info (API key, decision) via card modal
+2. API route updates Setting (if API key), re-creates Job row (status: QUEUED) with resolution context in prompt
+3. Cron picks up new job, relaunches ECS task
 
 ## Backend Structure (Next.js App Router)
 
@@ -127,47 +185,78 @@ On user resolution:
 src/
   app/
     (dashboard)/
+      layout.tsx                    ← auth guard, shell layout
       page.tsx                      ← kanban board
-      projects/[id]/chat/page.tsx   ← ideation chat panel
-      approvals/page.tsx            ← approval inbox
-      settings/page.tsx             ← API keys, platform config
+      projects/
+        new/page.tsx                ← ticket creation chat
+      approvals/page.tsx
+      settings/page.tsx
+    login/page.tsx
     api/
+      auth/
+        login/route.ts              ← POST: bcrypt compare → JWT cookie
+        logout/route.ts             ← POST: clear cookie
+        me/route.ts                 ← GET: current user
       projects/
         route.ts                    ← GET list, POST create
         [id]/
-          route.ts                  ← GET, PATCH, DELETE
-          stream/route.ts           ← SSE endpoint
-          approve/route.ts          ← phase transition approval
-          resolve/route.ts          ← blocker resolution
-          ideation/
-            message/route.ts        ← POST user message → enqueue turn
-            finalize/route.ts       ← POST finalize → enqueue finalization turn
+          route.ts                  ← GET, PATCH
+          chat/route.ts             ← POST: stream Sonnet (ticket creation conversation)
+          context-files/route.ts    ← GET: list S3 context files
+          create-ticket/route.ts    ← POST: enqueue TICKET_CONTEXT_BUILD job
+          phase/route.ts            ← POST: transition phase → QUEUED job
+      jobs/
+        [jobId]/
+          events/route.ts           ← POST: agent callback (bearer token)
+          stream/route.ts           ← GET: SSE stream of job events
+          status/route.ts           ← GET: poll job status
+      approvals/
+        route.ts                    ← POST: agent creates approval request
+        [id]/route.ts               ← PATCH: approve/reject
       webhooks/
-        pagerduty/route.ts          ← incoming PagerDuty events
-      auth/
-        route.ts                    ← login, session
+        pagerduty/route.ts          ← POST: incoming PagerDuty events → priority MAINTAIN_INCIDENT job
+      cron/
+        queue-poller/route.ts       ← GET: Vercel Cron, launches queued ECS tasks
+  middleware.ts                     ← protect all routes except /login and /api/auth/*
   lib/
-    db.ts                           ← Prisma singleton
-    queue.ts                        ← BullMQ queues + workers
-    s3.ts                           ← S3 client + helpers
-    ecs.ts                          ← ECS RunTask wrapper
-    secrets.ts                      ← encrypt/decrypt helpers
-    sse.ts                          ← SSE response helpers
-    conversation.ts                 ← serialize ideation_messages → conversation.md
+    db.ts                           ← Prisma v7 singleton (PrismaPg adapter)
+    auth.ts                         ← JWT sign/verify (jose), getCurrentUser, createSession
+    secrets.ts                      ← AES-256 encrypt/decrypt (Node.js crypto)
+    s3.ts                           ← S3 client + put/get/list helpers
+    ecs.ts                          ← launchECSTask() — RunTask wrapper
+    utils.ts                        ← cn() classname merger
   types/
-    index.ts                        ← shared types
+    index.ts                        ← shared TS types (ProjectStatus, JobPhase, etc.)
+  components/
+    layout/
+      sidebar.tsx
+      shell.tsx
+    dashboard/
+      status-badge.tsx
+      project-card.tsx
+      ready-shelf.tsx
+      kanban-column.tsx
+      kanban-board.tsx
+    chat/
+      message-list.tsx
+      message-bubble.tsx
+      typing-indicator.tsx
+      composer.tsx
+    context-panel/
+      context-panel.tsx
+      context-file-item.tsx
 ```
 
 ## Auth
 
-- Single admin account — credentials in environment variables (`ADMIN_PASSWORD_HASH`)
-- Login → JWT signed with `JWT_SECRET` env var, stored in httpOnly cookie
-- Middleware protects all routes except `/api/auth` and `/api/webhooks/pagerdury`
-- PagerDuty webhook authenticated via HMAC signature verification (not JWT)
+- Single admin user row in Postgres (`User` table), seeded via `prisma db seed`
+- Login: `POST /api/auth/login` — bcrypt compare, sign 7-day JWT, set httpOnly cookie (`appforge_session`)
+- Middleware: verify JWT cookie on all routes except `/login`, `/api/auth/*`, `/api/webhooks/*`
+- Env vars needed: `JWT_SECRET` (32-byte base64), `ENCRYPTION_KEY` (32-byte hex), `ADMIN_EMAIL`, `ADMIN_PASSWORD`
 
 ## Platform Constraints Injection
 
-`platform-constraints.md` is generated at task start based on the project's configured hosting provider.
+`platform-constraints.md` is seeded into S3 at project creation. Agents load it first on every run.
 
 For Vercel:
 ```markdown
@@ -186,5 +275,3 @@ For Vercel:
 - Persistent local disk writes
 - Self-hosted databases or caches
 ```
-
-This file is injected before any planning or code generation begins.

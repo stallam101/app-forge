@@ -4,27 +4,29 @@
 
 AppForge is a single-tenant software factory. A developer gives it an idea — as vague as "I want a fintech app" or as specific as a full brief — and AppForge autonomously moves that idea through the entire software development lifecycle: research, build, deploy, and maintain.
 
-Each phase is powered by an OpenClaw agent running in an isolated container. The developer interacts via a kanban board, approving phase transitions and resolving blockers. Otherwise, agents run autonomously.
+Each phase is powered by an OpenClaw agent running in an isolated ECS Fargate container. The developer interacts via a kanban board, approving phase transitions and resolving blockers. Otherwise, agents run autonomously.
 
-## Problem It Solves
+## How a Project Starts
 
-Building and maintaining software requires constant context-switching: research, planning, coding, testing, deploying, monitoring, marketing. AppForge collapses this into a single interface where agents handle execution and the developer handles decisions.
+The developer opens `/projects/new` — a full-page conversational interface with an OpenClaw agent. They describe their idea; the agent does light research, asks clarifying questions, narrows the niche across multiple turns. When the developer is satisfied, they submit the ticket. An autonomous context-building step synthesizes the conversation into structured context (`ideation/product-direction.md` + `project-context.md` stub). A toast fires while this runs. When done, the ticket appears in the **Ready** shelf on the kanban.
 
-## Phases
+This conversation is one-time and permanent — once the ticket is created you cannot return to it.
 
-### 1. Ideation (interactive — the only conversational phase)
-User starts a back-and-forth conversation with the agent. User gives a one-line idea; the agent does an initial market sweep, asks clarifying questions, presents niche options, and validates assumptions across multiple turns. Each user message triggers a fresh research-capable container — Reddit, X, web search — that updates the project's wiki and replies. The conversation ends when either party signals "finalize." Final output: target audience, niche, competitors, monetization model, tech stack, feature list. After user approval, the project is handed off to Generation.
+## Three Phases
 
-### 2. Generation
-Agent builds the app. Creates GitHub repo, writes code, runs tests, starts dev servers, pushes commits, deploys to Vercel via GitHub integration. Constrained to what Vercel can host (see platform constraints). Produces: live deployed app, GitHub repo, test report.
+### 1. Research (autonomous)
+Agent takes the product direction from ticket creation and goes deep. Full Reddit/X sweep, competitor matrix, market sizing, tech stack recommendation with rationale, prioritized feature list, monetization model. All findings written to the Context Engine. User approves when done → queues for Generation.
 
-### 3. Maintain
-Agent runs on cron. Audits SEO, generates AEO content, monitors production via PagerDuty webhooks, opens GitHub PRs with fixes. Auto-merges high-confidence changes (rule-based), flags everything else for approval. Produces: ongoing PRs, approval requests, incident resolutions.
+### 2. Generation (autonomous)
+Agent builds the app. Creates GitHub repo, writes code, runs tests, deploys to Vercel via GitHub integration. Constrained to what Vercel can host. User approves when done → moves to Maintain.
+
+### 3. Maintain (cron + event-driven)
+Agent runs daily. Audits SEO via sitemap-driven Playwright crawl, generates AEO content (FAQ pages + JSON-LD schema), posts to X (with approval gate), monitors production via PagerDuty webhooks. Auto-merges high-confidence changes (rule-based). Flags everything else for approval.
 
 ## Core Principles
 
-- **Ideation is a dialogue. Everything after is autonomous.** The user converses with the agent only during Ideation, to shape the idea and pick the niche. Generation and Maintain run hands-off — user is pinged only for blockers and approvals.
+- **Conversation shapes the idea. Agents execute everything after.** The only user↔agent dialogue is during ticket creation. All three phases run autonomously — user is pinged only for blockers and approvals.
 - **User approves, agent executes.** Phase transitions require human sign-off. Execution is autonomous within a phase.
 - **Transparent.** Every agent action is cited. PRs are linked. Reasoning is visible.
 - **Platform-aware.** Agents know the hosting platform's constraints before they plan or build.
-- **Adaptive research depth.** During Ideation, the agent goes broad on vague turns and gap-fills on specific ones. Across phases, more user-provided context = less agent research.
+- **Context compounds.** Every phase leaves the Context Engine richer than it found it.

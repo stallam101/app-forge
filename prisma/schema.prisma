@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -10,4 +5,284 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+<<<<<<< HEAD
+enum ProjectStatus {
+  READY
+  RESEARCH
+=======
+enum Phase {
+  BACKLOG
+  IDEATION
+>>>>>>> 66dcf6bb2c6f4ac90238724d397c0d78437ec439
+  GENERATION
+  MAINTAIN
+  ARCHIVED
+}
+
+<<<<<<< HEAD
+enum JobPhase {
+  TICKET_CONTEXT_BUILD
+  RESEARCH
+  GENERATION
+  MAINTAIN_SEO
+  MAINTAIN_AEO
+  MAINTAIN_INCIDENT
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  COMPLETE
+  FAILED
+  BLOCKED
+  AWAITING_APPROVAL
+}
+
+enum JobEventType {
+  progress
+  blocker
+  approval_request
+  complete
+  error
+}
+
+enum MessageRole {
+  user
+  assistant
+}
+
+enum ApprovalType {
+  SEO_PR
+  AEO_PR
+  INCIDENT_FIX
+  CONTENT_PR
+  DEPENDENCY_BUMP
+  X_POST
+  PHASE_TRANSITION
+=======
+enum JobStatus {
+  QUEUED
+  RUNNING
+  AWAITING_MESSAGE
+  AWAITING_APPROVAL
+  BLOCKED
+  FAILED
+  COMPLETE
+}
+
+enum LogLevel {
+  INFO
+  WARN
+  ERROR
+  BLOCKER
+  COMPLETE
+>>>>>>> 66dcf6bb2c6f4ac90238724d397c0d78437ec439
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+<<<<<<< HEAD
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  description String
+  status      ProjectStatus @default(READY)
+  s3Prefix    String        @unique
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  jobs      Job[]
+  messages  Message[]
+  approvals Approval[]
+}
+
+model Job {
+  id         String    @id @default(cuid())
+  projectId  String
+  phase      JobPhase
+  status     JobStatus @default(QUEUED)
+  ecsTaskArn String?
+  jobToken   String    @unique @default(cuid())
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  events    JobEvent[]
+  approvals Approval[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([phase, status])
+}
+
+model JobEvent {
+  id        String       @id @default(cuid())
+  jobId     String
+  type      JobEventType
+  message   String
+  metadata  Json?
+  createdAt DateTime     @default(now())
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([jobId, createdAt])
+}
+
+model Message {
+  id        String      @id @default(cuid())
+  projectId String
+  role      MessageRole
+  content   String
+  turn      Int
+  metadata  Json?
+  createdAt DateTime    @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([projectId, turn])
+}
+
+model Approval {
+  id          String         @id @default(cuid())
+  projectId   String
+  jobId       String?
+  title       String
+  description String
+  type        ApprovalType
+  metadata    Json?
+  status      ApprovalStatus @default(PENDING)
+  createdAt   DateTime       @default(now())
+  resolvedAt  DateTime?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  job     Job?    @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([status])
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+=======
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String
+  phase       Phase    @default(BACKLOG)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  phaseJobs        PhaseJob[]
+  ideationMessages IdeationMessage[]
+  jobLogs          JobLog[]
+  artifacts        Artifact[]
+  approvalRequests ApprovalRequest[]
+
+  @@map("projects")
+}
+
+model PhaseJob {
+  id            String    @id @default(uuid())
+  projectId     String    @map("project_id")
+  phase         Phase
+  status        JobStatus @default(QUEUED)
+  blockerReason String?   @map("blocker_reason")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  completedAt   DateTime? @map("completed_at")
+
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  ideationMessages IdeationMessage[]
+  jobLogs          JobLog[]
+
+  @@map("phase_jobs")
+}
+
+model IdeationMessage {
+  id               String   @id @default(uuid())
+  phaseJobId       String   @map("phase_job_id")
+  projectId        String   @map("project_id")
+  role             String   // "user" | "agent"
+  content          String
+  citationsJson    String?  @map("citations_json")
+  filesWrittenJson String?  @map("files_written_json")
+  containerExitCode Int?    @map("container_exit_code")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  phaseJob PhaseJob @relation(fields: [phaseJobId], references: [id], onDelete: Cascade)
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("ideation_messages")
+}
+
+model JobLog {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  jobId     String   @map("job_id")
+  phase     Phase
+  level     LogLevel
+  message   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phaseJob PhaseJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("job_logs")
+}
+
+model Artifact {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  phase     Phase
+  filePath  String   @map("file_path")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("artifacts")
+}
+
+model ApprovalRequest {
+  id        String         @id @default(uuid())
+  projectId String         @map("project_id")
+  phase     Phase
+  title     String
+  summary   String
+  reasoning String?
+  prUrl     String?        @map("pr_url")
+  diffPreview String?      @map("diff_preview")
+  status    ApprovalStatus @default(PENDING)
+  createdAt DateTime       @default(now()) @map("created_at")
+  resolvedAt DateTime?     @map("resolved_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("approval_requests")
+}
+
+model Secret {
+  id             String @id @default(uuid())
+  keyName        String @unique @map("key_name")
+  encryptedValue String @map("encrypted_value")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("secrets")
+>>>>>>> 66dcf6bb2c6f4ac90238724d397c0d78437ec439
 }

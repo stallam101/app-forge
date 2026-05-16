@@ -1,103 +1,97 @@
 # AppForge — Interface
 
-## Kanban Board (main view)
+## Dashboard Layout
 
-Primary interface. Columns map to phases. One project card per phase can be actively running at a time — others queue behind it.
-
-### Columns
 ```
-Backlog | Ideation | Generation | Maintain | Archived
+┌─────────────────────────────────────────────────────┐
+│  Ready to Start                                      │
+│  [Card] [Card]                                       │
+├─────────────────────────────────────────────────────┤
+│  Research  │  Generation  │  Maintain  │  Archived  │
+│  [Card]    │  [Card]      │  [Card]    │            │
+└─────────────────────────────────────────────────────┘
 ```
 
-### Card States (badge on each card)
+### Ready Shelf (above kanban)
+Tickets that have completed the ticket creation conversation and context-build. Waiting for user to drag into Research. Cards show a green `ready` badge. This is NOT a kanban column — it's a holding area.
+
+### Kanban Columns
+```
+Research | Generation | Maintain | Archived
+```
+
+One project card per column can be actively running at a time — others queue behind it within that column.
+
+## Card States
+
 | Badge | Meaning |
 |-------|---------|
-| `queued` | Waiting for active runner to finish |
+| `ready` | Ticket creation complete — waiting to be dragged to Research |
+| `queued` | In the column queue, waiting for active runner to finish |
 | `running` | Agent currently executing |
-| `awaiting message` | (Ideation only) Agent replied — waiting for the user's next chat message |
-| `blocked` | Agent paused — needs user input outside the conversation (API key, decision) |
-| `awaiting approval` | Phase complete, user must approve before next phase starts |
+| `blocked` | Agent paused — needs user input (API key, decision) |
+| `awaiting approval` | Phase complete — user must approve before next phase |
 | `failed` | Agent errored — view logs |
 
-### Card Contents
+## Card Contents
 - Project name
-- Current phase badge
+- Current phase + badge
 - Last agent activity (timestamp + one-line summary)
-- Quick action button:
-  - Ideation card → **Open Chat** (primary), Resolve Blocker, View Logs
-  - Generation / Maintain card → Approve (when applicable), Resolve Blocker, View Logs
+- Quick action button: Approve (when applicable) / Resolve Blocker / View Logs
 
 ## Phase Transitions
 
 User-controlled. When a phase completes, card moves to `awaiting approval`. User can:
 - Click **Approve → [Next Phase]** button on the card
-- Drag card to next column on the kanban board
+- Drag card to next column
 
 No automatic phase advancement. Ever.
 
 ## Hard Stoppers
 
-When an agent hits a blocker (missing API key, OAuth required, ambiguous user decision):
-1. Agent writes `BLOCKED` status + reason to Postgres
-2. Container exits cleanly — job stays in queue as `blocked`
+When an agent hits a blocker (missing API key, OAuth required, ambiguous decision):
+1. Agent writes `BLOCKED` + reason to Postgres
+2. Container exits cleanly — job stays as `blocked`
 3. Kanban card turns red, badge shows `blocked`
-4. Browser push notification fires with reason
-5. User clicks card → sees blocker modal with:
+4. Browser push notification fires
+5. User clicks card → blocker modal:
    - What the agent needs
-   - A form to provide it (API key input, decision radio, etc.)
-   - "Resume" button — re-queues the job with new context injected
+   - Form to provide it (API key input, decision radio, etc.)
+   - "Resume" button — re-queues job with new context
 
-## Ideation Chat Panel
+## Ticket Creation Page (`/projects/new`)
 
-Clicking an Ideation card opens the **Chat Panel** — the primary interface for that phase. Generation and Maintain cards do NOT have a chat panel; they only show logs + artifacts.
+Full-page conversational interface. Not a modal.
 
 ### Layout
-
-- **Main column:** threaded conversation, user messages + agent replies in chronological order
-- **Each agent reply may include:**
-  - Inline citations (clickable source links)
-  - File references — chips linking to wiki files written/updated that turn
-  - Research summaries, niche option cards, follow-up questions
-- **Composer at the bottom:** text input, send button. Sending triggers a fresh container — badge flips to `running` while the agent thinks.
-- **Finalize button:** explicit user request to wrap up the conversation and produce the final artifact set.
-- **Side panel:** live-rendered Context Engine artifacts (so the user sees the wiki growing in real time).
-- **Logs tab:** secondary view for container output (debugging).
+- **Main column:** threaded conversation — user messages + agent replies in chronological order
+- **Each agent reply includes:** inline citations, research summaries, clarifying questions, niche option cards
+- **Composer at bottom:** text input + send button. Sending triggers a fresh container turn.
+- **Side panel:** live Context Engine artifacts — user sees wiki files growing in real time
+- **Submit button:** when user is satisfied with the direction → triggers autonomous context-build → redirects to dashboard with toast
 
 ### Conversation Lifecycle
-
-1. User drags project Backlog → Ideation → **first turn auto-fires** (no user message needed). Agent opens with research summary + clarifying questions.
-2. User reads, replies, hits send → next turn fires.
-3. Repeat until either:
-   - User clicks **Finalize**
-   - Agent proposes finalization, user confirms in chat
-4. Finalization turn writes the full artifact set + rewrites `project-context.md` → badge moves to `awaiting approval`.
-5. User reviews artifacts (via side panel or Approvals page), approves → project queues for Generation.
-
-After approval, the conversation is read-only — preserved in `ideation/conversation.md` as historical context.
+1. User clicks **+ New Project** → navigates to `/projects/new`
+2. User enters project name + one-line idea → first agent turn auto-fires
+3. Agent does light research sweep → replies with acknowledgment + 2–4 clarifying questions
+4. User replies → subsequent turns fire, research deepens as niche narrows
+5. User clicks **Create Ticket** when satisfied
+6. Autonomous context-build runs → toast fires top-right: "Building context..." + spinner
+7. Done → redirect to dashboard, ticket appears in Ready shelf
+8. Conversation is read-only from this point — preserved in `ideation/conversation.md`
 
 ## Approvals Page
 
-Separate page from kanban. Inbox for all pending approval requests (primarily from Maintain phase).
+Separate page. Inbox for all pending approval requests (primarily from Maintain).
 
-Each approval request shows:
-- What the agent wants to do (plain English)
-- Full reasoning + citations (links, sources)
-- Link to the GitHub PR
-- Diff preview
+Each request shows:
+- Plain-English summary of what agent wants to do
+- Full reasoning + citations (source links, Lighthouse reports, PagerDuty alerts)
+- GitHub PR link + diff preview
 - Approve / Reject buttons
-
-Maintain phase auto-merges high-confidence changes (rule-based). Low-confidence → approval request appears here.
 
 ## Settings Page
 
-- **API Keys / Tokens:** GitHub token, Vercel token, Reddit API key, X API key, PagerDuty secret. Entered via secure form. Stored encrypted in Postgres. Editable anytime.
-- **Platform Constraints:** Which hosting provider generated apps target (default: Vercel). Editable.
+- **API Keys / Tokens:** GitHub token, Vercel token, Reddit API key, X API key, PagerDuty secret. Secure form. Encrypted in Postgres.
+- **Platform Constraints:** Hosting provider for generated apps (default: Vercel). Editable.
 - **Admin account:** Password change only.
-
-## New Project Flow
-
-1. Click **+ New Project**
-2. Enter: project name + one-line idea (description). One sentence is enough — the ideation conversation will refine the rest.
-3. Optionally: attach reference docs, links, or additional context to seed the conversation
-4. Submit → project created in Backlog
-5. Drag to Ideation column (or click **Start Ideation**) → first ideation turn auto-fires, agent opens the conversation

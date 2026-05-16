@@ -14,7 +14,7 @@ Five files exist before any agent runs:
 projects/{project-id}/
   brief.md                  ← raw user input, verbatim. Never modified.
   platform-constraints.md   ← hosting platform limits. Never modified by agents.
-  project-context.md        ← front page. Stub at creation, rewritten each phase.
+  project-context.md        ← front page. Stub at creation, updated each phase.
   index.md                  ← wiki catalog. Stub at creation, agent updates each run.
   log.md                    ← append-only audit trail. Agent appends each run.
 ```
@@ -28,14 +28,18 @@ No prescribed structure. Agent writes what's useful for the project. Examples:
 ```
 ideation/
   conversation.md           ← AppForge-managed (see below), not agent-written
-  market-research.md
-  competitors.md
-  niches.md
-  tech-stack.md             ← links to features.md where stack choice depends on a feature
-  features.md
-  product-brief.md
-  monetization.md
-known-issues.md              ← living file, created by generation, maintained by maintain
+  product-direction.md      ← crystallized output from ticket creation context build
+  niches.md                 ← niche options considered during conversation
+  initial-research.md       ← light research done during conversation turns
+research/
+  market-analysis.md        ← market size, trends, opportunity
+  competitors.md            ← competitor matrix
+  reddit-findings.md        ← Reddit pain points + sentiment
+  x-findings.md             ← X discussions + founder threads
+  features.md               ← prioritized MVP feature list
+  tech-stack.md             ← recommended stack with WHY rationale
+  monetization.md           ← monetization model + evidence
+known-issues.md             ← living file, created by generation, maintained by maintain
 generation/
   spec.md
   deployment.md
@@ -44,15 +48,13 @@ maintain/
   incident-2026-05-10.md
 compliance/                 ← fintech project might need this
   gdpr-requirements.md
-user-research/              ← social app might need this
-  interview-findings.md
 ```
 
 Agent decides what to create. A fintech app context looks different from a social app context.
 
 ## ideation/conversation.md — AppForge-managed
 
-Ideation is the only interactive phase. The conversation between user and agent is stored as a Postgres-backed list of messages (source of truth for UI + SSE) and serialized into `ideation/conversation.md` in S3 before every container spin. The ideation agent **reads** this file each turn but does **not write to it directly** — AppForge owns it.
+The ticket creation conversation between user and agent is stored as a Postgres-backed list of messages (source of truth for UI + SSE) and serialized into `ideation/conversation.md` in S3 before every container spin. The agent **reads** this file each turn but does **not write to it directly** — AppForge owns it.
 
 Format:
 
@@ -64,7 +66,7 @@ turn: 1
 role: agent
 date: 2026-05-15T12:42:00Z
 files_written:
-  - ideation/market-research.md (initial sweep)
+  - ideation/initial-research.md
 citations:
   - https://reddit.com/r/freelance/comments/...
 ---
@@ -93,43 +95,44 @@ Every other file under `ideation/` is agent-written and follows normal Context E
 
 ## project-context.md (front page)
 
-Always the first content file an agent reads after index. Gives full project understanding in one file. Rewritten by each phase on completion — not appended, rewritten.
+Always the first content file an agent reads after index. Gives full project understanding in one file.
 
 ```markdown
 # {Project Name} — Context
 
 ## What We're Building
 [Validated idea, target audience, core problem solved]
-[Written by ideation. Updated by maintain if scope pivots.]
+[Seeded by ticket creation context build. Updated by maintain if scope pivots.]
 
 ## Tech Stack
 [Stack decisions — framework, database, key libraries, hosting]
 [Includes WHY — rationale preserved so future agents don't undo intentional choices]
-[Written by ideation. Updated by generation if substitutions made.]
+[Written by Research. Updated by Generation if substitutions made.]
 
 ## Feature Scope (MVP)
 - [ ] Feature A
 - [x] Feature B  ← checked off as built
 - [ ] Feature C (deferred — see [known-issues.md](known-issues.md))
-[Written by ideation. Checked off by generation.]
+[Written by Research. Checked off by Generation.]
 
 ## Architecture
 [Key decisions: data model, auth, API structure, third-party services]
-[Written by generation. Updated by maintain if changed.]
+[Written by Generation. Updated by Maintain if changed.]
 
 ## Current State
-Phase: {ideation|generation|maintain}
-GitHub: {repo URL}
-Deployment: {Vercel URL}
-Last deploy: {date}
+Phase: {research|generation|maintain}
+GitHub: {repo URL — added by Generation}
+Deployment: {Vercel URL — added by Generation}
+Last deploy: {date — updated by Maintain on fix}
 
 ## Known Issues / Tech Debt
 {N} open issues — see [known-issues.md](known-issues.md)
 
 ## Decision Log
 [Append-only. Each phase adds entries. Never delete.]
-- [ideation 2026-05-14] Chose Supabase — app needs realtime (see [ideation/tech-stack.md](ideation/tech-stack.md))
-- [generation 2026-05-15] Deferred auth to v2 — see [generation/known-issues.md](generation/known-issues.md)
+- [ticket-creation 2026-05-14] Confirmed niche: solo freelancer budgeting, not agency — see [ideation/product-direction.md](ideation/product-direction.md)
+- [research 2026-05-14] Chose Supabase — realtime required (see [research/tech-stack.md](research/tech-stack.md))
+- [generation 2026-05-15] Deferred auth to v2 — see [known-issues.md](known-issues.md)
 ```
 
 ## index.md (wiki catalog)
@@ -146,16 +149,21 @@ Agent reads this first on every run. Three fields per entry: path, description, 
 ## Raw sources (immutable)
 - `brief.md` — original user input | load if unclear on original intent
 
-## Ideation
-- `ideation/tech-stack.md` — stack decisions with rationale | load before writing any code
-- `ideation/features.md` — full feature list, MVP vs future | load before implementing
-- `ideation/competitors.md` — competitor matrix | load for AEO question generation or positioning decisions
-- `ideation/market-research.md` — raw market findings with citations | load for SEO content or positioning
+## Ticket Creation
+- `ideation/product-direction.md` — confirmed niche, target audience, problem, constraints | load to understand what to build
+- `ideation/conversation.md` — full user↔agent chat transcript | load for deep intent context
+- `ideation/niches.md` — niche options considered | load for positioning decisions
+
+## Research
+- `research/tech-stack.md` — stack decisions with rationale | load before writing any code
+- `research/features.md` — full MVP feature list | load before implementing
+- `research/competitors.md` — competitor matrix | load for AEO question generation or positioning
+- `research/market-analysis.md` — market findings with citations | load for SEO content or positioning
 
 ## Generation
 - `generation/spec.md` — what was built, arch decisions, deviations from plan | load for incident diagnosis
 - `generation/deployment.md` — GitHub repo URL, Vercel URL, env vars | load for deploy operations
-- `generation/known-issues.md` — tech debt, deferred features | load for incident correlation
+- `known-issues.md` — tech debt, deferred features | load for incident correlation or new feature planning
 
 ## Maintain
 - `maintain/seo-audit-2026-05-14.md` — SEO findings and actions taken | load for SEO continuity
@@ -171,18 +179,31 @@ Agent appends a block on every run before exiting. Never edited, only appended.
 
 ---
 date: 2026-05-14
-phase: ideation
+phase: ticket-creation-context-build
+trigger: user submitted ticket
+files_written:
+  - ideation/product-direction.md
+index_updated: yes
+decisions:
+  - Confirmed niche: solo freelancer budgeting
+  - Target audience: creatives, not agencies
+---
+
+---
+date: 2026-05-14
+phase: research
 trigger: user approved
 files_written:
-  - ideation/market-research.md
-  - ideation/competitors.md
-  - ideation/tech-stack.md
-  - ideation/features.md
-  - ideation/monetization.md
+  - research/market-analysis.md
+  - research/competitors.md
+  - research/reddit-findings.md
+  - research/features.md
+  - research/tech-stack.md
+  - research/monetization.md
 index_updated: yes
 decisions:
   - Chose Supabase over plain Postgres — realtime feature requirement
-  - Targeted SMB segment after research showed enterprise market saturated
+  - Freemium monetization — evidence from competitor analysis
 ---
 
 ---
@@ -192,7 +213,7 @@ trigger: user approved
 files_written:
   - generation/spec.md
   - generation/deployment.md
-  - generation/known-issues.md
+  - known-issues.md
 index_updated: yes
 decisions:
   - Deferred auth — out of MVP scope
@@ -202,18 +223,18 @@ decisions:
 
 ## Cross-Linking
 
-Agents write relative markdown links between files when a connection is meaningful. Reader of one file can follow links to related detail without hunting through the index.
+Agents write relative markdown links between files when a connection is meaningful.
 
 ```markdown
-<!-- in tech-stack.md -->
+<!-- in research/tech-stack.md -->
 Chose Supabase over plain Postgres because the app requires realtime subscriptions
-(see [ideation/features.md#realtime-feed](ideation/features.md#realtime-feed)).
+(see [research/features.md#realtime-feed](research/features.md#realtime-feed)).
 
 <!-- in project-context.md decision log -->
-- [generation] Deferred auth to v2 — see [generation/known-issues.md](generation/known-issues.md)
+- [generation] Deferred auth to v2 — see [known-issues.md](known-issues.md)
 
 <!-- in maintain/incident-2026-05-10.md -->
-Root cause correlates with known issue flagged in [generation/known-issues.md#connection-pooling](generation/known-issues.md#connection-pooling).
+Root cause correlates with known issue flagged in [known-issues.md#connection-pooling](known-issues.md#connection-pooling).
 ```
 
 ## Prompt Injection Order (every phase)
@@ -227,10 +248,11 @@ Root cause correlates with known issue flagged in [generation/known-issues.md#co
 
 Before container exits:
 1. Append block to `log.md` — always, every run
-2. Update `index.md` — register any new files written, update descriptions if files changed
+2. Update `index.md` — register any new files, update descriptions if files changed
 3. Update `project-context.md` — **only if something in it actually changed:**
-   - Ideation: always (fills it from scratch)
-   - Generation: always (fills deployment URLs, checks off features, adds architecture)
+   - Ticket creation context build: always (seeds What We're Building from product-direction.md)
+   - Research: always (fills Tech Stack + Feature Scope + Decision Log)
+   - Generation: always (fills Architecture, GitHub URL, Deployment URL, checks off features)
    - Maintain cron (SEO/AEO): only if known issues changed or a deploy happened
    - Maintain incident: only if fix was applied (updates Known Issues, Last deploy, Decision Log)
 4. Upload all new/modified files to S3

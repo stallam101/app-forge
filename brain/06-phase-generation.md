@@ -54,10 +54,25 @@ If ideation recommends something incompatible, agent substitutes nearest complia
 
 ## Vercel Deployment
 
-1. User has GitHub integration enabled on Vercel (one-time — flagged as blocker if not done)
-2. Agent creates GitHub repo → Vercel auto-detects and creates project
-3. Every push to `main` → auto-deploy
-4. Agent reads deployment URL from Vercel API after push (requires `VERCEL_TOKEN`)
+Tooling: **Vercel CLI via bash MCP** (`mcp-server-commands`). No dedicated Vercel MCP — the CLI covers all needed operations and `VERCEL_TOKEN` is required either way.
+
+1. Agent creates GitHub repo via GitHub MCP
+2. Agent creates and links Vercel project via CLI:
+   ```bash
+   vercel link --yes --token $VERCEL_TOKEN --project appforge-{slug}
+   ```
+   If project doesn't exist yet, create it first:
+   ```bash
+   vercel project add appforge-{slug} --token $VERCEL_TOKEN
+   vercel link --yes --token $VERCEL_TOKEN --project appforge-{slug}
+   ```
+3. Every push to `main` → Vercel auto-deploys via linked integration
+4. Agent reads deployment URL from CLI output or:
+   ```bash
+   vercel inspect --token $VERCEL_TOKEN appforge-{slug}
+   ```
+
+Note: Vercel GitHub app must be installed on the org/user. Agent must explicitly create + link the project before pushing — GitHub app alone does not auto-create Vercel projects.
 
 ## Testing
 
@@ -99,7 +114,7 @@ Before container exits:
 | Blocker | Required input |
 |---------|---------------|
 | `GITHUB_TOKEN` missing | Re-enter in settings |
-| Vercel GitHub integration not set up | User action — link Vercel to GitHub |
+| `VERCEL_TOKEN` missing | Re-enter in settings |
 | Test failures after 3 rounds | User decision — review failure context |
 | Ambiguous feature implementation | User decision — agent presents options |
 | External API required for core feature (e.g. Stripe) | Relevant API key |

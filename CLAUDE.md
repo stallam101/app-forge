@@ -12,9 +12,10 @@ Brain doc locations:
 - `brain/02-interface.md` — kanban UI, user flows, approvals
 - `brain/03-architecture.md` — AWS stack, infra, data stores
 - `brain/04-technical-deep-dive.md` — SSE, container lifecycle, backend structure
-- `brain/05-phase-ideation.md` — ideation agent
-- `brain/06-phase-generation.md` — generation agent
-- `brain/07-phase-maintain.md` — maintain agent
+- `brain/05-ticket-creation.md` — ticket creation: conversational ideation + autonomous context build
+- `brain/05b-phase-research.md` — Research phase agent
+- `brain/06-phase-generation.md` — Generation phase agent
+- `brain/07-phase-maintain.md` — Maintain phase agent
 - `brain/08-context-engine.md` — Context Engine: wiki-based context system powering all agents (read before touching agent prompts or S3 structure)
 
 

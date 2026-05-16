@@ -85,7 +85,7 @@ Reddit: out of scope (bot accounts get shadowbanned — not worth the risk).
 **Priority job — skips queue, spins immediately.**
 
 1. Receive PagerDuty payload: error message, stack trace, affected service, timestamp
-2. Pull Vercel runtime logs via Vercel API for the affected deployment
+2. Pull Vercel runtime logs via CLI (bash MCP): `vercel logs --token $VERCEL_TOKEN {project} --limit 100`
 3. Load `generation/spec.md`, `generation/known-issues.md`, recent `maintain/incident-*.md`
 4. Diagnose: correlate error across PagerDuty payload + Vercel logs + known issues + spec
 5. Attempt fix: write code change as GitHub PR

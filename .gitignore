@@ -41,3 +41,9 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# Project context files (runtime data, not source)
+/projects/
+
+# Playwright MCP artifacts
+/.playwright-mcp/

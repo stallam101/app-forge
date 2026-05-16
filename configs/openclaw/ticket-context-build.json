@@ -1,0 +1,31 @@
+{
+  "model": {
+    "provider": "openai-completions",
+    "baseUrl": "https://integrate.api.nvidia.com/v1",
+    "apiKey": "${NVIDIA_API_KEY}",
+    "model": "nvidia/nemotron-super-49b-v1"
+  },
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace/context"]
+    },
+    "s3": {
+      "command": "npx",
+      "args": ["-y", "mcp-s3"],
+      "env": {
+        "AWS_REGION": "${AWS_REGION}",
+        "AWS_ACCESS_KEY_ID": "${AWS_ACCESS_KEY_ID}",
+        "AWS_SECRET_ACCESS_KEY": "${AWS_SECRET_ACCESS_KEY}",
+        "S3_BUCKET": "${S3_BUCKET_NAME}"
+      }
+    },
+    "tavily": {
+      "command": "npx",
+      "args": ["-y", "tavily-mcp"],
+      "env": {
+        "TAVILY_API_KEY": "${TAVILY_API_KEY}"
+      }
+    }
+  }
+}
