@@ -4,7 +4,52 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, Loader2, ChevronRight } from "lucide-react"
-import ReactMarkdown from "react-markdown"
+import ReactMarkdown, { type Components } from "react-markdown"
+
+const mdComponents: Components = {
+  h1: ({ children }) => (
+    <h1 className="text-white text-xl font-bold mt-6 mb-3 leading-snug border-b border-[#1a1a1a] pb-2">
+      {children}
+    </h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="text-white text-base font-semibold mt-5 mb-2 leading-snug">{children}</h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="text-[#ddd] text-sm font-semibold mt-4 mb-1.5 leading-snug">{children}</h3>
+  ),
+  p: ({ children }) => (
+    <p className="text-[#aaa] text-sm leading-[1.75] mb-3">{children}</p>
+  ),
+  ul: ({ children }) => <ul className="mb-3 pl-5 space-y-1">{children}</ul>,
+  ol: ({ children }) => <ol className="mb-3 pl-5 space-y-1 list-decimal">{children}</ol>,
+  li: ({ children }) => (
+    <li className="text-[#aaa] text-sm leading-[1.6] list-disc">{children}</li>
+  ),
+  strong: ({ children }) => <strong className="text-white font-semibold">{children}</strong>,
+  em: ({ children }) => <em className="text-[#bbb] italic">{children}</em>,
+  code: ({ children }) => (
+    <code className="text-[#e2e8f0] bg-[#111] border border-[#222] px-1 py-0.5 rounded text-[13px] font-mono">
+      {children}
+    </code>
+  ),
+  pre: ({ children }) => (
+    <pre className="bg-[#0d0d0d] border border-[#1a1a1a] rounded-lg p-4 mb-3 overflow-x-auto text-[13px] font-mono text-[#e2e8f0]">
+      {children}
+    </pre>
+  ),
+  hr: () => <hr className="border-[#1a1a1a] my-5" />,
+  a: ({ href, children }) => (
+    <a href={href} className="text-[#6b9fff] underline underline-offset-2 hover:text-white transition-colors" target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-2 border-[#333] pl-4 mb-3 text-[#777] italic text-sm">
+      {children}
+    </blockquote>
+  ),
+}
 import { MessageList } from "@/components/chat/message-list"
 import { Composer } from "@/components/chat/composer"
 import { PhaseTimeline } from "@/components/phase-timeline"
@@ -125,16 +170,8 @@ export function ProjectBriefView({
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden rounded-lg border border-[#1a1a1a]">
         {/* Brief panel */}
-        <div className="w-1/2 flex-none border-r border-[#1a1a1a] overflow-y-auto p-6">
-          <div className="prose prose-invert prose-sm max-w-none
-            prose-headings:text-white prose-headings:font-semibold
-            prose-p:text-[#aaa] prose-p:leading-relaxed
-            prose-li:text-[#aaa]
-            prose-strong:text-white
-            prose-code:text-[#e2e8f0] prose-code:bg-[#111] prose-code:px-1 prose-code:rounded
-            prose-hr:border-[#1a1a1a]">
-            <ReactMarkdown>{brief}</ReactMarkdown>
-          </div>
+        <div className="w-1/2 flex-none border-r border-[#1a1a1a] overflow-y-auto p-6 font-sans">
+          <ReactMarkdown components={mdComponents}>{brief}</ReactMarkdown>
         </div>
 
         {/* Refinement chat */}
