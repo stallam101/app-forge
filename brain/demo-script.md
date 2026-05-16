@@ -1,6 +1,6 @@
 # Demo Script — AppForge Hackathon
 
-> ~5 min walk-through. Owned by Person 4. Read `hackathon-implementation-plan.md` and `person4-plan.md` for build context.
+> ~5 min walk-through. Owned by Person 4. Read `hackathon-implementation-plan.md` and `person/person4-plan.md` for build context.
 
 ## Preconditions (verify in last 10 min before demo)
 

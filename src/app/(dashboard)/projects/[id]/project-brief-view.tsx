@@ -7,6 +7,7 @@ import { ArrowLeft, Loader2, ChevronRight } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import { MessageList } from "@/components/chat/message-list"
 import { Composer } from "@/components/chat/composer"
+import { PhaseTimeline } from "@/components/phase-timeline"
 
 interface ChatMessage {
   id: string
@@ -112,8 +113,13 @@ export function ProjectBriefView({
           ) : (
             <ChevronRight size={14} />
           )}
-          Forge
+          Send to Research
         </button>
+      </div>
+
+      {/* Phase timeline */}
+      <div className="mb-4 flex-none">
+        <PhaseTimeline currentPhase="TICKET" state="complete" />
       </div>
 
       {/* Main content */}
