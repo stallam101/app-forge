@@ -16,6 +16,26 @@ curl -s -X POST "$CALLBACK_URL/api/jobs/$JOB_ID/events" \
   -d '{"type":"progress","message":"<your message here>"}'
 ```
 
+## Tool Call Logging
+
+**Before EVERY MCP tool call**, POST a `tool_use` event so humans can observe what you are doing:
+
+```bash
+curl -s -X POST "$CALLBACK_URL/api/jobs/$JOB_ID/events" \
+  -H "Authorization: Bearer $JOB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"tool_use","message":"[tool_name] <brief description of what you are searching/reading/writing>"}'
+```
+
+Examples:
+- `[tavily_search] Searching for "crowdfunding platform fee comparison 2024"`
+- `[tavily_search] Searching Reddit for "crowdfunding pain points medical emergencies"`
+- `[s3_get_object] Reading project-context.md`
+- `[s3_put_object] Writing research.md`
+- `[s3_put_object] Updating index.md`
+
+Do NOT skip this. Every tool call must be preceded by a tool_use event.
+
 ## Context Engine
 
 Load context:

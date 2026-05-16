@@ -124,6 +124,7 @@ enum JobStatus {
 
 enum JobEventType {
   progress
+  tool_use
   blocker
   approval_request
   complete

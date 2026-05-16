@@ -101,7 +101,15 @@ export function TicketBuildingView({ jobId, projectName }: TicketBuildingViewPro
           {events.map((e, i) => (
             <div key={i} className="flex items-start gap-3 text-sm">
               <span className="text-[#333] flex-none mt-0.5">›</span>
-              <span className={e.type === "error" ? "text-[#ef4444]" : "text-[#888]"}>
+              <span
+                className={
+                  e.type === "error"
+                    ? "text-[#ef4444]"
+                    : e.type === "tool_use"
+                    ? "text-[#a855f7]"
+                    : "text-[#888]"
+                }
+              >
                 {e.message}
               </span>
             </div>
