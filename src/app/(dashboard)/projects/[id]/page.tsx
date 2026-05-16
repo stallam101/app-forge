@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { getS3Object } from "@/lib/s3"
+import { getS3Object, listS3Objects } from "@/lib/s3"
 import { TicketBuildingView } from "./ticket-building-view"
 import { TicketFailedView } from "./ticket-failed-view"
 import { IdeationView } from "./ideation-view"
@@ -13,7 +13,6 @@ import type { JobStatus } from "@/types"
 
 type Params = { id: string }
 
-const RESEARCH_ARTIFACT_KEYS = ["research.md"]
 
 export default async function ProjectDetailPage({ params }: { params: Promise<Params> }) {
   const user = await getCurrentUser()
@@ -129,12 +128,12 @@ async function renderResearch(project: ProjectWithMessages) {
     createdAt: e.createdAt.toISOString(),
   }))
 
-  const artifactEntries = await Promise.all(
-    RESEARCH_ARTIFACT_KEYS.map(async (key) => ({
-      name: key,
-      content: await getS3Object(`${project.s3Prefix}/${key}`),
-    }))
-  )
+  const s3Files = await listS3Objects(project.s3Prefix)
+  const initialFiles = s3Files.map((f) => ({
+    name: f.key.replace(`${project.s3Prefix}/`, ""),
+    size: f.size,
+    lastModified: f.lastModified.toISOString(),
+  }))
 
   return (
     <ResearchView
@@ -143,7 +142,7 @@ async function renderResearch(project: ProjectWithMessages) {
       jobId={job?.id ?? null}
       initialJobStatus={(job?.status as JobStatus | undefined) ?? null}
       initialEvents={initialEvents}
-      initialArtifacts={artifactEntries}
+      initialFiles={initialFiles}
     />
   )
 }
