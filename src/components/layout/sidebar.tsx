@@ -1,8 +1,14 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { LayoutDashboard, CheckSquare, Settings, Zap } from "lucide-react"
+
+const NAV_ITEMS = [
+  { href: "/", label: "Projects", icon: LayoutDashboard },
+  { href: "/approvals", label: "Approvals", icon: CheckSquare },
+]
 
 export function Sidebar({ pendingApprovals }: { pendingApprovals: number }) {
   const pathname = usePathname()
