@@ -10,10 +10,8 @@ interface FieldDef {
 }
 
 const FIELDS: FieldDef[] = [
-  { key: "NVIDIA_API_KEY", label: "NVIDIA_API_KEY", hint: "build.nvidia.com — unlocks Research" },
-  { key: "TAVILY_API_KEY", label: "TAVILY_API_KEY", hint: "web search tool for the agent" },
-  { key: "GITHUB_TOKEN", label: "GITHUB_TOKEN", hint: "PR creation — unlocks Generation" },
-  { key: "VERCEL_TOKEN", label: "VERCEL_TOKEN", hint: "deploy — unlocks Maintain" },
+  { key: "GITHUB_TOKEN", label: "GITHUB_TOKEN", hint: "GitHub PAT — repo creation and push access for Generation" },
+  { key: "VERCEL_TOKEN", label: "VERCEL_TOKEN", hint: "Vercel token — deployment for Generation and Maintain" },
 ]
 
 export function SettingsForm() {
