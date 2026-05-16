@@ -3,12 +3,7 @@ import { db } from "@/lib/db"
 
 type Params = { jobId: string }
 
-const STATUS_MAP: Record<string, "RUNNING" | "COMPLETE" | "FAILED" | "BLOCKED" | "AWAITING_APPROVAL"> = {
-  complete: "COMPLETE",
-  error: "FAILED",
-  blocker: "BLOCKED",
-  approval_request: "AWAITING_APPROVAL",
-}
+const TERMINAL_STATUSES = ["COMPLETE", "FAILED"] as const
 
 export async function POST(req: NextRequest, { params }: { params: Promise<Params> }) {
   const { jobId } = await params
@@ -26,9 +21,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<Param
     data: { jobId, type, message, metadata: metadata ?? undefined },
   })
 
-  const newStatus = STATUS_MAP[type]
+  // Map event type to job status
+  let newStatus: string | undefined
+  if (type === "complete") {
+    // TICKET_CONTEXT_BUILD needs no user approval — mark COMPLETE so the brief view shows
+    // All other phases wait for user to approve before moving forward
+    newStatus = job.phase === "TICKET_CONTEXT_BUILD" ? "COMPLETE" : "AWAITING_APPROVAL"
+  } else if (type === "error") {
+    newStatus = "FAILED"
+  } else if (type === "blocker" || type === "approval_request") {
+    newStatus = "AWAITING_APPROVAL"
+  }
+
   if (newStatus) {
-    await db.job.update({ where: { id: jobId }, data: { status: newStatus } })
+    // Guard: don't override a job already in a terminal state
+    await db.job.updateMany({
+      where: { id: jobId, status: { notIn: [...TERMINAL_STATUSES] } },
+      data: { status: newStatus as "COMPLETE" | "FAILED" | "BLOCKED" | "AWAITING_APPROVAL" },
+    })
   }
 
   return NextResponse.json({ ok: true })

@@ -10,9 +10,9 @@ const STATUS_CONFIG: Record<string, { dot: string; label: string }> = {
   FAILED:            { dot: "#ef4444", label: "failed" },
   AWAITING_APPROVAL: { dot: "#a855f7", label: "awaiting approval" },
   COMPLETE:          { dot: "#22c55e", label: "complete" },
-  RESEARCH:          { dot: "#22c55e", label: "running" },
-  GENERATION:        { dot: "#22c55e", label: "running" },
-  MAINTAIN:          { dot: "#22c55e", label: "running" },
+  RESEARCH:          { dot: "#3b82f6", label: "research" },
+  GENERATION:        { dot: "#a855f7", label: "generation" },
+  MAINTAIN:          { dot: "#f59e0b", label: "maintain" },
   ARCHIVED:          { dot: "#555555", label: "archived" },
 }
 

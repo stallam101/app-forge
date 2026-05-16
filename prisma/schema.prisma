@@ -7,6 +7,95 @@ datasource db {
   provider = "postgresql"
 }
 
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  description String
+  status      ProjectStatus @default(READY)
+  s3Prefix    String        @unique
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  approvals   Approval[]
+  jobs        Job[]
+  messages    Message[]
+}
+
+model Job {
+  id         String     @id @default(cuid())
+  projectId  String
+  phase      JobPhase
+  status     JobStatus  @default(QUEUED)
+  ecsTaskArn String?
+  jobToken   String     @unique @default(cuid())
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  approvals  Approval[]
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  events     JobEvent[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([phase, status])
+}
+
+model JobEvent {
+  id        String       @id @default(cuid())
+  jobId     String
+  type      JobEventType
+  message   String
+  metadata  Json?
+  createdAt DateTime     @default(now())
+  job       Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([jobId, createdAt])
+}
+
+model Message {
+  id        String      @id @default(cuid())
+  projectId String
+  role      MessageRole
+  content   String
+  turn      Int
+  metadata  Json?
+  createdAt DateTime    @default(now())
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([projectId, turn])
+}
+
+model Approval {
+  id          String         @id @default(cuid())
+  projectId   String
+  jobId       String?
+  title       String
+  description String
+  type        ApprovalType
+  metadata    Json?
+  status      ApprovalStatus @default(PENDING)
+  createdAt   DateTime       @default(now())
+  resolvedAt  DateTime?
+  job         Job?           @relation(fields: [jobId], references: [id])
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([status])
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}
+
 enum ProjectStatus {
   READY
   RESEARCH
@@ -61,98 +150,4 @@ enum ApprovalStatus {
   PENDING
   APPROVED
   REJECTED
-}
-
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  createdAt DateTime @default(now())
-}
-
-model Project {
-  id          String        @id @default(cuid())
-  name        String
-  description String
-  status      ProjectStatus @default(READY)
-  s3Prefix    String        @unique
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-
-  jobs      Job[]
-  messages  Message[]
-  approvals Approval[]
-}
-
-model Job {
-  id         String    @id @default(cuid())
-  projectId  String
-  phase      JobPhase
-  status     JobStatus @default(QUEUED)
-  ecsTaskArn String?
-  jobToken   String    @unique @default(cuid())
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  events    JobEvent[]
-  approvals Approval[]
-
-  @@index([projectId])
-  @@index([status])
-  @@index([phase, status])
-}
-
-model JobEvent {
-  id        String       @id @default(cuid())
-  jobId     String
-  type      JobEventType
-  message   String
-  metadata  Json?
-  createdAt DateTime     @default(now())
-
-  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
-
-  @@index([jobId])
-  @@index([jobId, createdAt])
-}
-
-model Message {
-  id        String      @id @default(cuid())
-  projectId String
-  role      MessageRole
-  content   String
-  turn      Int
-  metadata  Json?
-  createdAt DateTime    @default(now())
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@index([projectId])
-  @@index([projectId, turn])
-}
-
-model Approval {
-  id          String         @id @default(cuid())
-  projectId   String
-  jobId       String?
-  title       String
-  description String
-  type        ApprovalType
-  metadata    Json?
-  status      ApprovalStatus @default(PENDING)
-  createdAt   DateTime       @default(now())
-  resolvedAt  DateTime?
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  job     Job?    @relation(fields: [jobId], references: [id], onDelete: SetNull)
-
-  @@index([projectId])
-  @@index([status])
-}
-
-model Setting {
-  id    String @id @default(cuid())
-  key   String @unique
-  value String
 }

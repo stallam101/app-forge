@@ -4,13 +4,21 @@ import { db } from "@/lib/db"
 import { putS3Object } from "@/lib/s3"
 import type { ProjectSummary, JobPhase, JobStatus } from "@/types"
 
-export async function POST() {
+export async function POST(req: Request) {
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+  let name = "Untitled"
+  let description = ""
+  try {
+    const body = await req.json()
+    if (typeof body.name === "string" && body.name.trim()) name = body.name.trim()
+    if (typeof body.description === "string") description = body.description.trim()
+  } catch { /* no body is fine */ }
+
   // Create first, then derive s3Prefix from the generated ID
   const project = await db.project.create({
-    data: { name: "Untitled", description: "", status: "READY", s3Prefix: "" },
+    data: { name, description, status: "READY", s3Prefix: "" },
   })
   const s3Prefix = `projects/${project.id}`
   await db.project.update({ where: { id: project.id }, data: { s3Prefix } })
