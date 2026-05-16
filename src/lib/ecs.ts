@@ -1,4 +1,4 @@
-import { ECSClient, RunTaskCommand } from "@aws-sdk/client-ecs"
+import { ECSClient, RunTaskCommand, DescribeTasksCommand } from "@aws-sdk/client-ecs"
 import { readFileSync } from "fs"
 import { join } from "path"
 import { db } from "./db"
@@ -14,6 +14,22 @@ const PHASE_TO_CONFIG: Record<string, string> = {
   MAINTAIN_SEO: "maintain-seo",
   MAINTAIN_AEO: "maintain-seo",
   MAINTAIN_INCIDENT: "maintain-incident",
+}
+
+export async function isECSTaskStopped(taskArn: string): Promise<boolean> {
+  try {
+    const result = await ecs.send(
+      new DescribeTasksCommand({
+        cluster: process.env.ECS_CLUSTER_ARN,
+        tasks: [taskArn],
+      })
+    )
+    const task = result.tasks?.[0]
+    if (!task) return true // task not found = gone
+    return task.lastStatus === "STOPPED" || task.lastStatus === "DEPROVISIONING"
+  } catch {
+    return false // don't false-positive on API errors
+  }
 }
 
 export async function launchECSTask(jobId: string, phase: JobPhase, projectId: string): Promise<string> {
@@ -33,12 +49,8 @@ export async function launchECSTask(jobId: string, phase: JobPhase, projectId: s
     }
   }
 
-  // Load phase config
-  const configName = PHASE_TO_CONFIG[phase] ?? "ticket-context-build"
-  const configPath = join(process.cwd(), "configs", "openclaw", `${configName}.json`)
-  const openclawConfig = readFileSync(configPath, "utf-8")
-
   // Load and interpolate prompt
+  const configName = PHASE_TO_CONFIG[phase] ?? "ticket-context-build"
   const promptPath = join(process.cwd(), "configs", "prompts", `${configName}.md`)
   const promptTemplate = readFileSync(promptPath, "utf-8")
   const baseUrl = process.env.APPFORGE_BASE_URL ?? ""
@@ -55,7 +67,6 @@ export async function launchECSTask(jobId: string, phase: JobPhase, projectId: s
     { name: "JOB_TOKEN", value: job.jobToken },
     { name: "S3_PREFIX", value: project.s3Prefix },
     { name: "APPFORGE_CALLBACK_URL", value: baseUrl },
-    { name: "OPENCLAW_CONFIG", value: openclawConfig },
     { name: "AGENT_PROMPT", value: agentPrompt },
     { name: "AWS_REGION", value: process.env.AWS_REGION ?? "us-east-1" },
     { name: "AWS_ACCESS_KEY_ID", value: process.env.AWS_ACCESS_KEY_ID ?? "" },
