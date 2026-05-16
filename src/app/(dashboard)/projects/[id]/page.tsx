@@ -202,6 +202,7 @@ async function renderMaintain(projectId: string, projectName: string) {
 
   return (
     <MaintainView
+      projectId={projectId}
       projectName={projectName}
       recentActivity={recentActivity}
       pendingApprovals={approvals}
