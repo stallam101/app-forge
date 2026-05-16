@@ -93,6 +93,43 @@ Reddit: out of scope (bot accounts get shadowbanned — not worth the risk).
 7. Approval request includes: full diagnosis, PagerDuty context, Vercel log excerpts, PR link, recommended action
 8. Write `maintain/incident-{id}.md`
 
+## Bundle Size Drift Tracking (cron)
+
+1. Measure JS bundle size after each audit (record in `maintain/bundle-{date}.md`)
+2. Compare against previous audit baseline
+3. If bundle grows >10% since last audit → flag with breakdown of largest chunks
+4. Suggest targeted fixes: code-splitting, lazy loading, tree-shaking, dead code removal
+5. Open GitHub PR with changes
+6. Track trend over time — surface in maintain dashboard
+
+## Analytics-Driven Insights (cron)
+
+1. Pull Vercel Analytics: Web Vitals, page views, bounce rates, traffic sources
+2. Identify high-bounce pages → suggest copy/layout/CTA changes
+3. Identify slow pages → targeted performance fixes
+4. Identify dead pages (zero or near-zero traffic) → flag for removal or SEO boost
+5. Produce insight report: `maintain/analytics-{date}.md`
+6. No auto-PRs — generates recommendations surfaced to user in Approvals page for decision
+
+## Competitor Re-Scan (cron, weekly)
+
+1. Pull original competitor list from ideation artifacts
+2. Re-crawl competitor sites (Playwright headless)
+3. Detect changes: new features, pricing changes, new landing pages, positioning shifts
+4. Cross-reference with current app capabilities — identify gaps or opportunities
+5. Produce intelligence report: `maintain/competitor-update-{date}.md`
+6. No PRs — purely informational. Surfaces as "Intel Update" card in dashboard
+
+## Content Freshness (cron)
+
+1. Scan all content pages (blog posts, landing pages, docs) on deployed site
+2. Check publish/last-modified dates
+3. Flag content older than configurable threshold (default: 90 days)
+4. Cross-reference stale content with current keyword trends (from SEO workflow data)
+5. Suggest refreshed copy, updated stats, new examples
+6. Open GitHub PRs with updated content
+7. Apply auto-merge rules (additive content updates to whitelisted files → auto-merge eligible)
+
 ## Performance & Security (cron)
 
 - `npm audit` on deployed repo → flag vulnerabilities
@@ -145,7 +182,11 @@ maintain/
   aeo-audit-{YYYY-MM-DD}.md
   incident-{pagerduty-id}.md
   performance-{YYYY-MM-DD}.md
-  x-posts-{YYYY-MM-DD}.md    ← log of approved + posted X content
+  x-posts-{YYYY-MM-DD}.md              ← log of approved + posted X content
+  bundle-{YYYY-MM-DD}.md               ← bundle size snapshot + drift analysis
+  analytics-{YYYY-MM-DD}.md            ← traffic insights, bounce rates, recommendations
+  competitor-update-{YYYY-MM-DD}.md    ← competitor changes, gaps, opportunities
+  content-freshness-{YYYY-MM-DD}.md    ← stale content flagged + refresh suggestions
 ```
 
 `project-context.md` updated only when something in it changes: Known Issues (incident resolved or new one found), Last deploy date (after a fix lands), Decision Log (significant architectural change). SEO/AEO cron runs that produce no structural changes do not touch `project-context.md`. `log.md` is appended on every run regardless.
@@ -159,3 +200,14 @@ maintain/
 | `X_API_KEY` missing | Re-enter in settings |
 | Incident cause unclear after full diagnosis | User decision — agent presents options with evidence |
 | Major dep breaking change | User decision |
+
+## Cron Schedule (configurable in settings)
+
+| Workflow | Schedule | Default |
+|----------|----------|---------|
+| SEO, AEO, Performance, Security, Bundle Size, Content Freshness | Daily | `0 9 * * *` |
+| Analytics-Driven Insights | Daily | `0 9 * * *` |
+| Competitor Re-Scan | Weekly | `0 9 * * 1` (Monday 9am) |
+| X Posting | Event-driven + daily check | `0 9 * * *` |
+
+Managed via Vercel Cron — hits `/api/cron/maintain` which queues maintain jobs for all active projects in Maintain phase. Competitor re-scan runs on separate weekly cron hitting `/api/cron/maintain/competitor`.
