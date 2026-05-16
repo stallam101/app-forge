@@ -2,7 +2,7 @@
 
 > Snapshot of where each of the 4 tracks stands. Update this file whenever a deliverable lands or a blocker surfaces. **Source of truth for "are we ready to demo?"**
 
-**Last updated:** 2026-05-16 (P2 ship)
+**Last updated:** 2026-05-16 (P1 repo-side scaffolding shipped)
 
 ---
 
@@ -10,7 +10,7 @@
 
 | Track | Owner | Status | Confidence |
 |---|---|---|---|
-| P1 — Brev / OpenClaw / Nemotron | Person 1 | Not started in repo (lives off-repo on Brev instance) | UNKNOWN |
+| P1 — Brev / OpenClaw / Nemotron | Person 1 | Repo-side scaffolding shipped (`scripts/brev-agent/`); Brev provisioning + OpenClaw install still off-repo | MED |
 | P2 — AppForge ↔ Brev wiring | Person 2 | **SHIPPED** ✅ — build green | HIGH |
 | P3 — Project detail views | Person 3 | In progress (unstaged: `research-view.tsx`, `generation-view.tsx`, `phase-timeline.tsx`, `phase.ts`) | MED |
 | P4 — Approvals, kanban, seed, demo, merge | Person 4 | In progress (unstaged: `approvals/page.tsx`, `approvals/[id]/route.ts`, `phase/route.ts`, `types/index.ts`) | MED |
@@ -28,14 +28,18 @@ Legend:
 **Plan:** [person1-plan.md](./person1-plan.md)
 
 ### Done
-- _(nothing visible in the AppForge repo; P1's work lives on the Brev instance)_
+- [x] `scripts/brev-agent/server.py` — FastAPI wrapper, `POST /run` returns `{ok,runId}` <5s, guarantees terminal complete/error callback on subprocess exit
+- [x] `scripts/brev-agent/setup.sh` — idempotent Brev box bootstrap (apt, venv, dirs, MCP pre-warm)
+- [x] `scripts/brev-agent/start.sh` — nohup uvicorn on :8080
+- [x] `scripts/brev-agent/smoke-test.sh` — laptop-side curl POST /run
+- [x] `scripts/brev-agent/README.md` — scp + flow docs
 
 ### Outstanding (blocks demo eligibility)
-- [ ] Brev instance provisioned + OpenClaw installed
-- [ ] `configs/research.openclaw.json` wired to Nemotron 3 Super 120B + Tavily + file_write
-- [ ] HTTP wrapper on `:8080` accepting `POST /run`
-- [ ] Public URL exposed → shared as `BREV_AGENT_URL`
-- [ ] `NVIDIA_API_KEY` + `TAVILY_API_KEY` shared with team
+- [ ] Brev A100 instance provisioned, port 8080 exposed
+- [ ] OpenClaw installed on the box (per nvidia.com/clawhelp)
+- [ ] `bash setup.sh && bash start.sh` succeed on the box
+- [ ] Public URL works → shared as `BREV_AGENT_URL`
+- [ ] `TAVILY_API_KEY` obtained + shared (NVIDIA_API_KEY already in hand)
 - [ ] At least one end-to-end run posting `complete` callback to AppForge
 
 **Blocks:** entire demo. Without `BREV_AGENT_URL`, P2's dispatcher fails loudly and P3's research-view has nothing to render.
