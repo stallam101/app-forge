@@ -30,6 +30,7 @@ export function ProjectCard({ project, isDragging, isOverlay, onStatusChange }: 
   const [menuOpen, setMenuOpen] = useState(false)
   const didDrag = useRef(false)
   const menuClicked = useRef(false)
+  const pointerStart = useRef<{ x: number; y: number } | null>(null)
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: project.id,
     disabled: !!isOverlay,
@@ -174,9 +175,15 @@ export function ProjectCard({ project, isDragging, isOverlay, onStatusChange }: 
       onPointerDown={(e) => {
         didDrag.current = false
         menuClicked.current = false
+        pointerStart.current = { x: e.clientX, y: e.clientY }
         onPointerDown?.(e)
       }}
-      onPointerMove={() => { didDrag.current = true }}
+      onPointerMove={(e) => {
+        if (!pointerStart.current) return
+        const dx = e.clientX - pointerStart.current.x
+        const dy = e.clientY - pointerStart.current.y
+        if (Math.sqrt(dx * dx + dy * dy) > 6) didDrag.current = true
+      }}
       onClick={(e) => {
         if (didDrag.current || menuClicked.current || menuOpen) return
         const target = e.target as HTMLElement
