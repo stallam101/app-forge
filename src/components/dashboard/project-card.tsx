@@ -1,16 +1,8 @@
 import Link from "next/link"
 import { Loader2, AlertCircle } from "lucide-react"
 import type { ProjectSummary } from "@/types"
+import { PHASE_LABELS } from "@/lib/phase"
 import { StatusBadge } from "./status-badge"
-
-const PHASE_LABELS: Record<string, string> = {
-  TICKET_CONTEXT_BUILD: "Ticket Creation",
-  RESEARCH:             "Research",
-  GENERATION:           "Generation",
-  MAINTAIN_SEO:         "Maintain · SEO",
-  MAINTAIN_AEO:         "Maintain · AEO",
-  MAINTAIN_INCIDENT:    "Maintain · Incident",
-}
 
 function relativeTime(date: Date): string {
   const diff = Date.now() - new Date(date).getTime()
@@ -31,6 +23,7 @@ export function ProjectCard({ project, isDragging }: ProjectCardProps) {
   const { activeJob, status, messageCount, ideationComplete } = project
   const isBlocked = activeJob?.status === "BLOCKED"
   const isFailed = activeJob?.status === "FAILED"
+  const isAwaitingApproval = activeJob?.status === "AWAITING_APPROVAL"
   const isBuildingTicket =
     activeJob?.phase === "TICKET_CONTEXT_BUILD" &&
     (activeJob.status === "QUEUED" || activeJob.status === "RUNNING")
@@ -89,6 +82,10 @@ export function ProjectCard({ project, isDragging }: ProjectCardProps) {
       ) : (
         <p className="text-[#555] text-[12px] mt-1 line-clamp-1">{project.description}</p>
       )}
+
+      {isAwaitingApproval ? (
+        <p className="text-[#a855f7] text-[11px] mt-1">tap Approvals →</p>
+      ) : null}
 
       <div className="flex items-center justify-between mt-3">
         <span className="text-[#555] text-[11px]">{relativeTime(project.updatedAt)}</span>

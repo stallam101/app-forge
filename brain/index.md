@@ -18,8 +18,11 @@ Read this file first. Follow links to relevant docs before starting any task.
 | [06-phase-generation.md](./06-phase-generation.md) | Generation phase — post-hackathon scope (stub in demo UI) |
 | [07-phase-maintain.md](./07-phase-maintain.md) | Maintain phase — post-hackathon scope (stub in demo UI) |
 | [08-context-engine.md](./08-context-engine.md) | Context Engine — wiki-based context system powering all agents |
-| [09-person3-detail-views.md](./09-person3-detail-views.md) | **Person 3 plan:** `/projects/[id]` switch on status + Research SSE view + phase timeline |
-| [person4-plan.md](./person4-plan.md) | **Person 4 plan:** approvals, kanban polish, seed, settings, merge, smoke |
+| **[person/current-status.md](./person/current-status.md)** | **Live status** — what's done, what's outstanding, blockers across all 4 tracks |
+| [person/person1-plan.md](./person/person1-plan.md) | **Person 1 plan:** Brev / OpenClaw / Nemotron — prize-eligibility unlock |
+| [person/person2-plan.md](./person/person2-plan.md) | **Person 2 plan:** AppForge ↔ Brev wiring — dispatcher, BLOCKED stubs, kick endpoint |
+| [person/person3-plan.md](./person/person3-plan.md) | **Person 3 plan:** `/projects/[id]` switch on status + Research SSE view + phase timeline |
+| [person/person4-plan.md](./person/person4-plan.md) | **Person 4 plan:** approvals, kanban polish, seed, settings, merge, smoke |
 | [demo-script.md](./demo-script.md) | ~5 min demo click flow + per-failure fallback narration |
 | [design.md](./design.md) | Design system — colors, typography, layout, components, page mockups |
 

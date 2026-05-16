@@ -43,3 +43,13 @@ export interface ProjectSummary {
   ideationComplete: boolean
   pendingApprovals?: number
 }
+
+export interface ApprovalCardData {
+  id: string
+  projectId: string
+  projectName: string
+  title: string
+  description: string
+  type: ApprovalType
+  createdAt: Date | string
+}

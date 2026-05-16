@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { DndContext, DragEndEvent, DragOverlay, closestCenter } from "@dnd-kit/core"
 import type { ProjectSummary, ProjectStatus } from "@/types"
 import { KanbanColumn } from "./kanban-column"
@@ -14,6 +14,8 @@ const COLUMNS: { id: ProjectStatus; label: string }[] = [
   { id: "ARCHIVED",   label: "Archived" },
 ]
 
+const ACTIVE_JOB_STATUSES = ["RUNNING", "QUEUED"] as const
+
 interface KanbanBoardProps {
   initialProjects: ProjectSummary[]
 }
@@ -22,26 +24,41 @@ export function KanbanBoard({ initialProjects }: KanbanBoardProps) {
   const [projects, setProjects] = useState<ProjectSummary[]>(initialProjects)
   const [draggingId, setDraggingId] = useState<string | null>(null)
 
-  // Poll for live updates every 5s
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      const res = await fetch("/api/projects")
-      if (res.ok) {
-        const data = await res.json()
-        setProjects(
-          data.map((p: ProjectSummary & { createdAt: string; updatedAt: string; activeJob?: ProjectSummary["activeJob"] & { updatedAt: string } }) => ({
-            ...p,
-            createdAt: new Date(p.createdAt),
-            updatedAt: new Date(p.updatedAt),
-            activeJob: p.activeJob
-              ? { ...p.activeJob, updatedAt: new Date(p.activeJob.updatedAt) }
-              : undefined,
-          }))
-        )
-      }
-    }, 5000)
-    return () => clearInterval(interval)
+  const refresh = useCallback(async () => {
+    const res = await fetch("/api/projects")
+    if (!res.ok) return
+    const data = await res.json()
+    setProjects(
+      data.map(
+        (
+          p: ProjectSummary & {
+            createdAt: string
+            updatedAt: string
+            activeJob?: ProjectSummary["activeJob"] & { updatedAt: string }
+          }
+        ) => ({
+          ...p,
+          createdAt: new Date(p.createdAt),
+          updatedAt: new Date(p.updatedAt),
+          activeJob: p.activeJob
+            ? { ...p.activeJob, updatedAt: new Date(p.activeJob.updatedAt) }
+            : undefined,
+        })
+      )
+    )
   }, [])
+
+  // Hot poll (2s) only while something is running or queued; slow poll (10s) otherwise.
+  useEffect(() => {
+    const anyActive = projects.some(
+      (p) =>
+        p.activeJob &&
+        (ACTIVE_JOB_STATUSES as readonly string[]).includes(p.activeJob.status)
+    )
+    const intervalMs = anyActive ? 2000 : 10000
+    const interval = setInterval(refresh, intervalMs)
+    return () => clearInterval(interval)
+  }, [projects, refresh])
 
   const readyProjects = projects.filter((p) => p.status === "READY")
   const byStatus = (status: ProjectStatus) => projects.filter((p) => p.status === status)
@@ -59,8 +76,9 @@ export function KanbanBoard({ initialProjects }: KanbanBoardProps) {
       await fetch(`/api/projects/${projectId}/phase`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetPhase: "RESEARCH" }),
+        body: JSON.stringify({ status: "RESEARCH" }),
       })
+      void refresh()
     }
   }
 

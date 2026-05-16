@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { db } from "@/lib/db"
-import type { ProjectStatus, JobPhase } from "@/types"
-
-const STATUS_TO_PHASE: Partial<Record<ProjectStatus, JobPhase>> = {
-  RESEARCH: "RESEARCH",
-  GENERATION: "GENERATION",
-  MAINTAIN: "MAINTAIN_SEO",
-}
+import { STATUS_TO_PHASE } from "@/lib/phase"
+import type { ProjectStatus } from "@/types"
 
 type Params = { id: string }
 
