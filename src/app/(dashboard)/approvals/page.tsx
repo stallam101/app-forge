@@ -22,10 +22,13 @@ export default async function ApprovalsPage() {
   }))
 
   return (
-    <div>
-      <h1 className="text-white text-[18px] font-medium mb-6">
-        Approvals{cards.length > 0 ? ` · ${cards.length}` : ""}
-      </h1>
+    <div className="max-w-[900px]">
+      <div className="mb-6">
+        <h1 className="text-white text-[20px] font-bold tracking-tight mb-1">
+          Approvals{cards.length > 0 ? ` · ${cards.length}` : ""}
+        </h1>
+        <p className="text-zinc-500 text-[13px]">Review agent-proposed changes before they go live</p>
+      </div>
       <ApprovalList initial={cards} />
     </div>
   )

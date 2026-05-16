@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { ArrowLeft } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import { ContextFileItem } from "./context-file-item"
+import { FileText } from "lucide-react"
 
 interface ContextFile {
   key: string
@@ -84,7 +85,6 @@ export function ContextPanel({ projectId }: ContextPanelProps) {
 
   useEffect(() => {
     let alive = true
-
     async function poll() {
       try {
         const res = await fetch(`/api/projects/${projectId}/context-files`)
@@ -94,79 +94,31 @@ export function ContextPanel({ projectId }: ContextPanelProps) {
         data.forEach((f) => seenKeys.current.add(f.key))
       } catch {}
     }
-
     poll()
     const id = setInterval(poll, 3000)
-    return () => {
-      alive = false
-      clearInterval(id)
-    }
+    return () => { alive = false; clearInterval(id) }
   }, [projectId])
 
-  async function openFile(name: string) {
-    setSelectedFile(name)
-    setFileContent(null)
-    setLoadingContent(true)
-    try {
-      const res = await fetch(`/api/projects/${projectId}/context-files?file=${encodeURIComponent(name)}`)
-      if (!res.ok) throw new Error()
-      const { content } = await res.json()
-      setFileContent(content)
-    } catch {
-      setFileContent("_Failed to load file._")
-    } finally {
-      setLoadingContent(false)
-    }
-  }
+  const hasFiles = files.length > 0
 
   return (
-    <div className="w-[280px] flex-none border-l border-[#1a1a1a] flex flex-col" style={{ fontFamily: "var(--font-geist-sans), system-ui, sans-serif" }}>
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-[#1a1a1a] flex items-center gap-2 flex-none">
-        {selectedFile && (
-          <button
-            onClick={() => { setSelectedFile(null); setFileContent(null) }}
-            className="text-[#555] hover:text-white transition-colors flex-none"
-          >
-            <ArrowLeft size={13} />
-          </button>
+    <div className={`flex-none border-l border-white/[0.06] flex flex-col bg-white/[0.01] transition-all duration-300 ${hasFiles ? "w-[280px]" : "w-[200px]"}`}>
+      <div className="px-4 py-4 border-b border-white/[0.06] flex items-center justify-between">
+        <h2 className="text-[12px] font-semibold text-zinc-400 uppercase tracking-wider">Context</h2>
+        {hasFiles && (
+          <span className="text-[10px] text-zinc-500 bg-white/[0.06] px-2 py-0.5 rounded-full font-medium">{files.length}</span>
         )}
-        <h2 className="text-[12px] font-medium text-[#888] uppercase tracking-wider truncate">
-          {selectedFile ?? "Context Files"}
-        </h2>
       </div>
-
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto">
-        {selectedFile ? (
-          <div className="px-4 py-4">
-            {loadingContent ? (
-              <p className="text-[12px] text-[#555]">Loading...</p>
-            ) : (
-              <ReactMarkdown components={mdComponents}>
-                {fileContent ?? ""}
-              </ReactMarkdown>
-            )}
+      <div className="flex-1 overflow-y-auto py-2 px-2">
+        {!hasFiles ? (
+          <div className="flex flex-col items-center justify-center py-8 gap-2.5 px-3">
+            <FileText size={16} className="text-zinc-700" />
+            <p className="text-[11px] text-zinc-600 text-center leading-relaxed">Context files appear here as agents work</p>
           </div>
         ) : (
-          <div className="py-2 px-1">
-            {files.length === 0 ? (
-              <p className="text-[12px] text-[#555] px-3 py-4">
-                Files will appear here as context is built.
-              </p>
-            ) : (
-              files.map((f) => (
-                <ContextFileItem
-                  key={f.key}
-                  name={f.name}
-                  size={f.size}
-                  lastModified={f.lastModified}
-                  isNew={!seenKeys.current.has(f.key)}
-                  onClick={() => openFile(f.name)}
-                />
-              ))
-            )}
-          </div>
+          files.map((f) => (
+            <ContextFileItem key={f.key} name={f.name} size={f.size} lastModified={f.lastModified} isNew={!seenKeys.current.has(f.key)} />
+          ))
         )}
       </div>
     </div>

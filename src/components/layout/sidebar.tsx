@@ -1,9 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
-import { LayoutDashboard, Bell, Settings } from "lucide-react"
+import { usePathname } from "next/navigation"
+import { LayoutDashboard, CheckSquare, Settings, Zap } from "lucide-react"
 
 export function Sidebar({ pendingApprovals }: { pendingApprovals: number }) {
   const pathname = usePathname()
@@ -33,49 +32,46 @@ export function Sidebar({ pendingApprovals }: { pendingApprovals: number }) {
   }
 
   return (
-    <aside className="w-[220px] h-full flex-none flex flex-col bg-[#000] border-r border-[#1a1a1a]">
-      <div className="px-4 py-5">
-        <span className="text-white text-[14px] font-medium">AppForge</span>
+    <aside className="w-[260px] h-full flex-none flex flex-col bg-[#09090b] border-r border-white/[0.06]">
+      <div className="px-5 py-6 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center">
+          <Zap size={18} className="text-black" strokeWidth={2.5} fill="black" />
+        </div>
+        <div>
+          <span className="text-white text-[15px] font-bold tracking-tight">AppForge</span>
+          <span className="block text-[10px] text-zinc-500 font-medium tracking-wide uppercase">AI Factory</span>
+        </div>
       </div>
 
-      <nav className="flex-1 px-2 space-y-0.5">
-        <Link
-          href="/"
-          className={[
-            "flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150",
-            isActive("/") ? "bg-[#111] text-white" : "text-[#888] hover:bg-[#0a0a0a] hover:text-white",
-          ].join(" ")}
-        >
-          <LayoutDashboard size={16} />
-          Dashboard
-        </Link>
-
-        <Link
-          href="/approvals"
-          className={[
-            "flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150",
-            isActive("/approvals") ? "bg-[#111] text-white" : "text-[#888] hover:bg-[#0a0a0a] hover:text-white",
-          ].join(" ")}
-        >
-          <Bell size={16} />
-          <span className="flex-1">Approvals</span>
-          {pending > 0 && (
-            <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-white text-black text-[10px] font-semibold">
-              {pending > 99 ? "99+" : pending}
-            </span>
-          )}
-        </Link>
+      <nav className="flex-1 px-3 mt-1 space-y-1">
+        {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
+          <Link
+            key={href}
+            href={href}
+            className={[
+              "flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 ease-out",
+              isActive(href)
+                ? "bg-white/[0.08] text-white shadow-sm"
+                : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300",
+            ].join(" ")}
+          >
+            <Icon size={18} strokeWidth={1.8} />
+            {label}
+          </Link>
+        ))}
       </nav>
 
-      <div className="px-2 pb-4">
+      <div className="px-3 pb-5">
         <Link
           href="/settings"
           className={[
-            "flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150",
-            isActive("/settings") ? "bg-[#111] text-white" : "text-[#888] hover:bg-[#0a0a0a] hover:text-white",
+            "flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 ease-out",
+            isActive("/settings")
+              ? "bg-white/[0.08] text-white"
+              : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300",
           ].join(" ")}
         >
-          <Settings size={16} />
+          <Settings size={18} strokeWidth={1.8} />
           Settings
         </Link>
       </div>

@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { DndContext, DragEndEvent, DragOverlay, closestCenter } from "@dnd-kit/core"
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCenter } from "@dnd-kit/core"
 import type { ProjectSummary, ProjectStatus } from "@/types"
 import { KanbanColumn } from "./kanban-column"
 import { ProjectCard } from "./project-card"
@@ -13,6 +13,12 @@ const COLUMNS: { id: ProjectStatus; label: string }[] = [
   { id: "MAINTAIN",   label: "Maintain" },
   { id: "ARCHIVED",   label: "Archived" },
 ]
+
+/** Valid transitions: source status → allowed target statuses (drag only) */
+const VALID_TRANSITIONS: Partial<Record<ProjectStatus, ProjectStatus[]>> = {
+  READY:      ["RESEARCH"],
+  RESEARCH:   ["GENERATION"],
+}
 
 const ACTIVE_JOB_STATUSES = ["RUNNING", "QUEUED"] as const
 
@@ -48,7 +54,6 @@ export function KanbanBoard({ initialProjects }: KanbanBoardProps) {
     )
   }, [])
 
-  // Hot poll (2s) only while something is running or queued; slow poll (10s) otherwise.
   useEffect(() => {
     const anyActive = projects.some(
       (p) =>
@@ -64,6 +69,41 @@ export function KanbanBoard({ initialProjects }: KanbanBoardProps) {
   const byStatus = (status: ProjectStatus) => projects.filter((p) => p.status === status)
   const draggingProject = projects.find((p) => p.id === draggingId)
 
+  function handleStatusChange(projectId: string, newStatus: string) {
+    setProjects((prev) =>
+      prev.map((p) => (p.id === projectId ? { ...p, status: newStatus as ProjectStatus } : p))
+    )
+  }
+
+  /** Check if a project can be dragged at all (must have completed its current phase) */
+  function canDrag(project: ProjectSummary): boolean {
+    // READY projects can drag if ideation is complete (ticket built)
+    if (project.status === "READY") return project.ideationComplete
+    // RESEARCH projects can drag if their active job is COMPLETE
+    if (project.status === "RESEARCH") {
+      return project.activeJob?.status === "COMPLETE" || !project.activeJob
+    }
+    return false
+  }
+
+  /** Check if a project can be dropped on a specific target column */
+  function canDrop(project: ProjectSummary, targetStatus: ProjectStatus): boolean {
+    if (project.status === targetStatus) return false
+    const allowed = VALID_TRANSITIONS[project.status]
+    if (!allowed || !allowed.includes(targetStatus)) return false
+    // Must have completed current phase to transition
+    return canDrag(project)
+  }
+
+  // Compute which columns are valid drop targets for the currently dragged project
+  const validDropTargets = draggingProject
+    ? COLUMNS.filter((col) => canDrop(draggingProject, col.id)).map((c) => c.id)
+    : []
+
+  function handleDragStart(event: DragStartEvent) {
+    setDraggingId(event.active.id as string)
+  }
+
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     setDraggingId(null)
@@ -71,25 +111,31 @@ export function KanbanBoard({ initialProjects }: KanbanBoardProps) {
     if (!over) return
     const projectId = active.id as string
     const targetStatus = over.id as ProjectStatus
+    const project = projects.find((p) => p.id === projectId)
 
-    if (targetStatus === "RESEARCH") {
-      await fetch(`/api/projects/${projectId}/phase`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "RESEARCH" }),
-      })
-      void refresh()
-    }
+    if (!project || !canDrop(project, targetStatus)) return
+
+    // Optimistic update
+    setProjects((prev) =>
+      prev.map((p) => (p.id === projectId ? { ...p, status: targetStatus } : p))
+    )
+
+    await fetch(`/api/projects/${projectId}/phase`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: targetStatus }),
+    })
+    void refresh()
   }
 
   return (
     <DndContext
       collisionDetection={closestCenter}
-      onDragStart={(e) => setDraggingId(e.active.id as string)}
+      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onDragCancel={() => setDraggingId(null)}
     >
-      <ReadyShelf projects={readyProjects} />
+      <ReadyShelf projects={readyProjects} onStatusChange={handleStatusChange} />
 
       <div className="flex gap-4">
         {COLUMNS.map((col) => (
@@ -98,14 +144,17 @@ export function KanbanBoard({ initialProjects }: KanbanBoardProps) {
             id={col.id}
             label={col.label}
             projects={byStatus(col.id)}
+            isValidTarget={validDropTargets.includes(col.id)}
+            isDragging={!!draggingId}
+            onStatusChange={handleStatusChange}
           />
         ))}
       </div>
 
-      <DragOverlay>
+      <DragOverlay dropAnimation={null}>
         {draggingProject ? (
-          <div className="w-[280px]">
-            <ProjectCard project={draggingProject} isDragging />
+          <div className="w-[280px] opacity-90 rotate-[2deg] scale-105 shadow-2xl shadow-black/50 pointer-events-none">
+            <ProjectCard project={draggingProject} isDragging isOverlay />
           </div>
         ) : null}
       </DragOverlay>

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { Send } from "lucide-react"
 
 interface ComposerProps {
   isDisabled: boolean
@@ -25,26 +26,27 @@ export function Composer({ isDisabled, onSend }: ComposerProps) {
   }
 
   return (
-    <div className="border-t border-[#1a1a1a] p-4">
+    <div className="border-t border-white/[0.06] p-4 bg-white/[0.01]">
       <div className="flex gap-3 items-end">
         <textarea
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Describe your project idea…"
+          placeholder="Describe your project idea..."
           rows={3}
           disabled={isDisabled}
-          className="flex-1 resize-none bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg px-4 py-3 text-sm text-white placeholder-[#444] focus:outline-none focus:border-[#333] disabled:opacity-50"
+          className="flex-1 resize-none bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-[14px] text-zinc-200 leading-relaxed placeholder-zinc-600 focus:outline-none focus:border-white/20 focus:ring-2 focus:ring-white/10 disabled:opacity-40 transition-all duration-200"
         />
         <button
           type="button"
           onClick={submit}
           disabled={isDisabled || !value.trim()}
-          className="h-10 px-5 bg-white text-black text-sm font-medium rounded-lg disabled:opacity-40 hover:bg-[#e5e5e5] transition-colors"
+          className="h-11 w-11 flex items-center justify-center bg-white hover:bg-zinc-200 text-black rounded-xl disabled:opacity-30 active:scale-[0.95] transition-all duration-200"
         >
-          Send
+          <Send size={16} strokeWidth={2} />
         </button>
       </div>
+      <p className="text-zinc-700 text-[11px] mt-2 px-1">Press Enter to send, Shift+Enter for new line</p>
     </div>
   )
 }

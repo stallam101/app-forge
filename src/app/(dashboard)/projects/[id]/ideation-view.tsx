@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Loader2, Hammer } from "lucide-react"
+import { ArrowLeft, Loader2, Zap, Archive, Pencil, Check } from "lucide-react"
 import { MessageList } from "@/components/chat/message-list"
 import { Composer } from "@/components/chat/composer"
 import { ContextPanel } from "@/components/context-panel/context-panel"
@@ -32,6 +32,19 @@ export function IdeationView({
   const [isStreaming, setIsStreaming] = useState(false)
   const [forgeReady, setForgeReady] = useState(briefExists)
   const [forging, setForging] = useState(false)
+  const [name, setName] = useState(projectName || "Untitled")
+  const [isEditingName, setIsEditingName] = useState(false)
+
+  function saveName() {
+    setIsEditingName(false)
+    const trimmed = name.trim()
+    if (!trimmed || trimmed === projectName) return
+    fetch(`/api/projects/${projectId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmed }),
+    })
+  }
 
   async function streamTurn(userMessage: string) {
     if (isStreaming) return
@@ -112,45 +125,72 @@ export function IdeationView({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Back row */}
-      <div className="flex items-center gap-3 mb-4 flex-none">
-        <Link
-          href="/"
-          className="flex items-center gap-1.5 text-[#555] hover:text-white text-sm transition-colors"
-        >
-          <ArrowLeft size={14} />
-          Dashboard
-        </Link>
-        <span className="text-[#333] text-sm">/</span>
-        <span className="text-[#888] text-sm">{projectName || "Untitled"}</span>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5 flex-none">
+        <div className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-1.5 text-zinc-500 hover:text-white text-[13px] font-medium transition-colors duration-200">
+            <ArrowLeft size={15} strokeWidth={2} />
+            Dashboard
+          </Link>
+          <span className="text-zinc-700">/</span>
+          {isEditingName ? (
+            <div className="flex items-center gap-2">
+              <input
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={saveName}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveName()
+                  if (e.key === "Escape") { setName(projectName || "Untitled"); setIsEditingName(false) }
+                }}
+                className="bg-white/[0.06] border border-white/[0.12] rounded-lg px-3 py-1 text-white text-[15px] font-semibold focus:outline-none focus:ring-2 focus:ring-white/10 w-[240px]"
+              />
+              <button onClick={saveName} className="text-blue-400 hover:text-zinc-300"><Check size={16} /></button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setIsEditingName(true)}
+              className="group flex items-center gap-2 text-white text-[15px] font-semibold hover:text-zinc-300 transition-colors duration-200"
+            >
+              {name}
+              <Pencil size={12} className="text-zinc-600 group-hover:text-blue-400 transition-colors duration-200" />
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              fetch(`/api/projects/${projectId}/phase`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: "ARCHIVED" }),
+              })
+              router.push("/")
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] text-zinc-400 hover:text-zinc-200 text-[13px] font-medium rounded-xl active:scale-[0.97] transition-all duration-200"
+          >
+            <Archive size={14} strokeWidth={2} />
+            Archive
+          </button>
+          <button
+            onClick={handleForge}
+            disabled={!forgeReady || forging}
+            className="flex items-center gap-2 px-5 py-2.5 bg-white hover:bg-zinc-200 text-black text-[13px] font-semibold rounded-xl active:scale-[0.97] transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            {forging ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} strokeWidth={2.5} fill="currentColor" />}
+            Forge
+          </button>
+        </div>
       </div>
 
       {/* Main content */}
-      <div className="flex flex-1 overflow-hidden rounded-lg border border-[#1a1a1a]">
-        {/* Chat column */}
+      <div className="flex flex-1 overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02]">
         <div className="flex flex-1 flex-col min-w-0">
           <MessageList messages={messages} isStreaming={isStreaming} />
           <Composer isDisabled={isStreaming} onSend={streamTurn} />
         </div>
-
-        {/* Context panel */}
         <ContextPanel projectId={projectId} />
-      </div>
-
-      {/* Forge CTA */}
-      <div className="flex justify-end mt-4 flex-none">
-        <button
-          onClick={handleForge}
-          disabled={!forgeReady || forging}
-          className="flex items-center gap-2 px-5 py-2.5 bg-white text-black text-sm font-medium rounded-lg disabled:opacity-30 hover:bg-[#e5e5e5] transition-colors disabled:cursor-not-allowed"
-        >
-          {forging ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <Hammer size={14} />
-          )}
-          Forge
-        </button>
       </div>
     </div>
   )

@@ -3,29 +3,27 @@
 import { useState, useTransition, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Eye, EyeOff } from "lucide-react"
+import { CheckCircle2, XCircle, Inbox } from "lucide-react"
 import type { ApprovalCardData, ApprovalType } from "@/types"
 
 const TYPE_LABEL: Record<ApprovalType, string> = {
-  SEO_PR: "SEO PR",
-  AEO_PR: "AEO PR",
-  INCIDENT_FIX: "Incident Fix",
-  CONTENT_PR: "Content PR",
-  DEPENDENCY_BUMP: "Dependency Bump",
+  SEO_PR: "SEO",
+  AEO_PR: "AEO",
+  INCIDENT_FIX: "Incident",
+  CONTENT_PR: "Content",
+  DEPENDENCY_BUMP: "Deps",
   X_POST: "X Post",
-  PHASE_TRANSITION: "Phase Transition",
-  CREDENTIAL_REQUEST: "Credential Request",
+  PHASE_TRANSITION: "Phase",
 }
 
-const TYPE_COLOR: Record<ApprovalType, string> = {
-  SEO_PR: "#3b82f6",
-  AEO_PR: "#3b82f6",
-  INCIDENT_FIX: "#ef4444",
-  CONTENT_PR: "#22c55e",
-  DEPENDENCY_BUMP: "#f59e0b",
-  X_POST: "#22c55e",
-  PHASE_TRANSITION: "#a855f7",
-  CREDENTIAL_REQUEST: "#f97316",
+const TYPE_STYLE: Record<ApprovalType, string> = {
+  SEO_PR: "text-blue-400 bg-blue-500/10",
+  AEO_PR: "text-cyan-400 bg-cyan-500/10",
+  INCIDENT_FIX: "text-red-400 bg-red-500/10",
+  CONTENT_PR: "text-emerald-400 bg-emerald-500/10",
+  DEPENDENCY_BUMP: "text-amber-400 bg-amber-500/10",
+  X_POST: "text-emerald-400 bg-emerald-500/10",
+  PHASE_TRANSITION: "text-blue-400 bg-white/[0.06]",
 }
 
 function relativeTime(date: Date | string): string {
@@ -212,59 +210,70 @@ export function ApprovalList({ initial }: ApprovalListProps) {
   }
 
   if (cards.length === 0) {
-    return <p className="text-[#555] text-sm">No pending approvals.</p>
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-4">
+        <div className="w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center">
+          <Inbox size={24} className="text-zinc-600" />
+        </div>
+        <div className="text-center max-w-[360px]">
+          <p className="text-zinc-400 text-[15px] font-medium mb-1">All clear</p>
+          <p className="text-zinc-600 text-[13px] leading-relaxed">
+            When maintain agents propose SEO fixes, dependency bumps, incident patches, or content changes — they appear here for review.
+          </p>
+        </div>
+        <div className="flex flex-wrap justify-center gap-2 mt-2">
+          {["SEO Fixes", "Dep Updates", "Incident Patches", "Content PRs", "AEO Schema"].map((tag) => (
+            <span key={tag} className="text-[11px] text-zinc-600 bg-white/[0.04] border border-white/[0.04] px-2.5 py-1 rounded-full">{tag}</span>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="flex flex-col gap-3">
       {error && (
-        <div className="text-[#ef4444] text-xs border border-[#ef4444]/40 bg-[#ef4444]/10 rounded-md px-3 py-2">
-          {error}
-        </div>
+        <div className="text-red-400 text-xs border border-red-500/30 bg-red-500/10 rounded-xl px-4 py-2.5">{error}</div>
       )}
       {cards.map((c) => {
-        if (c.type === "CREDENTIAL_REQUEST") {
-          return <CredentialCard key={c.id} card={c} onResolved={handleResolved} />
-        }
-
-        const color = TYPE_COLOR[c.type] ?? "#555"
+        const style = TYPE_STYLE[c.type] ?? "text-zinc-400 bg-zinc-500/10"
         const isPending = pendingId === c.id
 
         return (
           <div
             key={c.id}
-            className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-4 transition-colors duration-150 hover:border-[#333]"
+            className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-5 hover:bg-white/[0.04] transition-all duration-200"
           >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-medium uppercase tracking-wide" style={{ color }}>
-                  <span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle" style={{ backgroundColor: color }} />
-                  {TYPE_LABEL[c.type]}
-                </span>
-                <Link href={`/projects/${c.projectId}`} className="text-[#888] text-[12px] hover:text-white">
-                  {c.projectName}
-                </Link>
-                <span className="text-[#555] text-[11px]">· {relativeTime(c.createdAt)}</span>
-              </div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${style}`}>
+                {TYPE_LABEL[c.type]}
+              </span>
+              <Link href={`/projects/${c.projectId}`} className="text-blue-400 text-[12px] font-medium hover:underline">
+                {c.projectName}
+              </Link>
+              <span className="text-zinc-700">·</span>
+              <span className="text-zinc-600 text-[11px]">{relativeTime(c.createdAt)}</span>
             </div>
 
-            <p className="text-white text-[14px] font-medium leading-snug">{c.title}</p>
-            <p className="text-[#888] text-[12px] mt-1 line-clamp-3 whitespace-pre-line">{c.description}</p>
+            <p className="text-white text-[14px] font-semibold leading-snug">{c.title}</p>
+            <p className="text-zinc-400 text-[13px] mt-1.5 line-clamp-3 whitespace-pre-line leading-relaxed">{c.description}</p>
 
-            <div className="flex items-center justify-end gap-2 mt-4">
+            <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-white/[0.04]">
               <button
                 onClick={() => resolve(c.id, "REJECTED")}
                 disabled={isPending}
-                className="h-7 px-3 rounded-md text-[12px] text-[#888] border border-[#1a1a1a] hover:border-[#333] hover:text-white disabled:opacity-40 transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 bg-white/[0.04] border border-white/[0.06] hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-400 text-zinc-400 text-[13px] font-medium rounded-xl active:scale-[0.97] transition-all duration-200 disabled:opacity-40"
               >
+                <XCircle size={14} />
                 Reject
               </button>
               <button
                 onClick={() => resolve(c.id, "APPROVED")}
                 disabled={isPending}
-                className="h-7 px-3 rounded-md text-[12px] font-medium text-black bg-white hover:bg-[#ddd] disabled:opacity-40 transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[13px] font-semibold rounded-xl shadow-lg shadow-emerald-500/20 active:scale-[0.97] transition-all duration-200 disabled:opacity-40"
               >
-                {isPending ? "…" : "Approve"}
+                <CheckCircle2 size={14} />
+                {isPending ? "..." : "Approve"}
               </button>
             </div>
           </div>

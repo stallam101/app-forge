@@ -1,5 +1,7 @@
 "use client"
 
+import { FileText } from "lucide-react"
+
 interface ContextFileItemProps {
   name: string
   size: number
@@ -11,15 +13,15 @@ interface ContextFileItemProps {
 export function ContextFileItem({ name, size, isNew, onClick }: ContextFileItemProps) {
   const kb = (size / 1024).toFixed(1)
   return (
-    <button
-      onClick={onClick}
-      className="w-full flex items-center justify-between py-2 px-3 hover:bg-[#111] rounded-md transition-colors text-left"
-    >
-      <div className="flex items-center gap-2 min-w-0">
-        {isNew && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-none" />}
-        <span className="text-[13px] text-[#ccc] truncate font-mono">{name}</span>
+    <div className="flex items-center gap-2.5 py-2 px-3 hover:bg-white/[0.04] rounded-lg transition-colors duration-150">
+      <FileText size={14} className="text-zinc-500 flex-none" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          {isNew && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-none animate-pulse" />}
+          <span className="text-[13px] text-zinc-300 truncate font-mono">{name}</span>
+        </div>
       </div>
-      <span className="text-[11px] text-[#555] ml-2 flex-none">{kb}kb</span>
-    </button>
+      <span className="text-[10px] text-zinc-600 flex-none">{kb}kb</span>
+    </div>
   )
 }

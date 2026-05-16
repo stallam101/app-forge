@@ -1,101 +1,171 @@
 # AppForge — Interface
 
-> **Hackathon Scope (1h):** Drag-and-drop is in the cut list — phase advance via button in 1h scope. Kanban + Research view ship as money-shot UI; Generation and Maintain detail views are honest stub placeholders. See `hackathon-implementation-plan.md`.
-
 ## Dashboard Layout
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  Ready to Start                                      │
-│  [Card] [Card]                                       │
-├─────────────────────────────────────────────────────┤
-│  Research  │  Generation  │  Maintain  │  Archived  │
-│  [Card]    │  [Card]      │  [Card]    │            │
-└─────────────────────────────────────────────────────┘
+┌── Sidebar (260px) ──┬─────────────────────────────────────────────┐
+│                     │  Your Projects (Unforged)    [+ New Project] │
+│  [⚡] AppForge      │  [Card] [Card] [Card] →scroll               │
+│       AI FACTORY    │                                              │
+│                     ├──────────────────────────────────────────────┤
+│  Dashboard ●        │  Pipeline                                    │
+│  Approvals          │  Research → Build → Maintain                 │
+│                     │                                              │
+│                     │  🔍Research  💻Generation  🛡Maintain  📦Archived│
+│  Settings           │  [Card]      [Card]        [Card]            │
+│                     │  [Card]      [Card]                          │
+└─────────────────────┴──────────────────────────────────────────────┘
 ```
 
-### Ready Shelf (above kanban)
-Tickets that have completed the ticket creation conversation and context-build. Waiting for user to drag into Research. Cards show a green `ready` badge. This is NOT a kanban column — it's a holding area.
+### Unforged Shelf (above kanban)
+
+Projects that completed ticket creation. Horizontal scrolling row. White "New Project" button top-right.
 
 ### Kanban Columns
+
 ```
 Research | Generation | Maintain | Archived
 ```
 
-One project card per column can be actively running at a time — others queue behind it within that column.
+Each column has an icon (Search/Cpu/Shield/Archive) and a count badge. Empty columns show the column icon with "No projects in {phase}" text.
 
-Hackathon 1h: drag-and-drop deferred; phase advance by button click. Auto-refresh kanban every 2s while any project is RUNNING.
+## Card Interactions
+
+### Drag and Drop
+
+- All cards are draggable via dnd-kit `useDraggable`
+- Drop validation enforced by `canDrop()`:
+  - READY → RESEARCH: only when `ideationComplete === true`
+  - RESEARCH → GENERATION: only when active job is COMPLETE
+  - Invalid drops snap back — no API call, no error shown
+- Valid drop targets highlight green during drag
+- Invalid columns dim to 40% opacity
+- Drag overlay shows rotated card clone with shadow
+
+### Three-Dot Menu
+
+- Appears on card hover (top-right corner)
+- All pointer events stopped from propagating to drag handler
+- Options:
+  - **Archive** (non-archived cards): moves card to Archived column instantly (optimistic)
+  - **Unarchive** (archived cards): moves card back to Unforged shelf instantly (optimistic)
+- API fires in background — no page reload
+
+### Click to Navigate
+
+- Click card → navigates to `/projects/{id}`
+- Click + drag → drags card, no navigation
+- Click three-dot menu → opens menu, no navigation
 
 ## Card States
 
-| Badge | Meaning |
-|-------|---------|
-| `ready` | Ticket creation complete — waiting to be dragged to Research |
-| `queued` | In the column queue, waiting for active runner to finish |
-| `running` | Agent currently executing |
-| `blocked` | Agent paused — needs user input (API key, decision) |
-| `awaiting approval` | Phase complete — user must approve before next phase |
-| `failed` | Agent errored — view logs |
-
-## Card Contents
-- Project name
-- Current phase + badge
-- Last agent activity (timestamp + one-line summary)
-- Quick action button: Approve (when applicable) / Resolve Blocker / View Logs
+| Badge | Style | Meaning |
+|-------|-------|---------|
+| `ready` | blue pill | Ticket complete, waiting for Research |
+| `queued` | amber pill | In column queue |
+| `running` | emerald pill (pulse) | Agent executing |
+| `blocked` | red pill + red border | Needs user input |
+| `review` | blue pill | Phase complete, awaiting approval |
+| `failed` | red pill + red border | Agent errored |
+| `complete` | emerald pill | Phase finished |
+| `archived` | zinc pill | Archived |
 
 ## Phase Transitions
 
-User-controlled. When a phase completes, card moves to `awaiting approval`. User can:
-- Click **Approve → [Next Phase]** button on the card
-- Drag card to next column
+User-controlled. When a phase completes, card shows `review` badge. User can:
+- Drag card to next column (if status is COMPLETE)
+- Click **Approve** button (triggers next phase)
 
 No automatic phase advancement. Ever.
 
-## Hard Stoppers
-
-When an agent hits a blocker (missing API key, OAuth required, ambiguous decision):
-1. Agent writes `BLOCKED` + reason to Postgres
-2. Container exits cleanly — job stays as `blocked`
-3. Kanban card turns red, badge shows `blocked`
-4. Browser push notification fires
-5. User clicks card → blocker modal:
-   - What the agent needs
-   - Form to provide it (API key input, decision radio, etc.)
-   - "Resume" button — re-queues job with new context
-
 ## Ticket Creation Page (`/projects/new`)
 
-Full-page conversational interface. Not a modal.
+Full-page chat interface. Project created on mount, URL updated to `/projects/{id}/chat`.
 
 ### Layout
-- **Main column:** threaded conversation — user messages + agent replies in chronological order
-- **Each agent reply includes:** inline citations, research summaries, clarifying questions, niche option cards
-- **Composer at bottom:** text input + send button. Sending triggers a fresh container turn.
-- **Side panel:** live Context Engine artifacts — user sees wiki files growing in real time
-- **Submit button:** when user is satisfied with the direction → triggers autonomous context-build → redirects to dashboard with toast
 
-### Conversation Lifecycle
-1. User clicks **+ New Project** → navigates to `/projects/new`
-2. User enters project name + one-line idea → first agent turn auto-fires
-3. Agent does light research sweep → replies with acknowledgment + 2–4 clarifying questions
-4. User replies → subsequent turns fire, research deepens as niche narrows
-5. User clicks **Create Ticket** when satisfied
-6. Autonomous context-build runs → toast fires top-right: "Building context..." + spinner
-7. Done → redirect to dashboard, ticket appears in Ready shelf
-8. Conversation is read-only from this point — preserved in `ideation/conversation.md`
+```
+┌── Header: ← Dashboard / [editable name] ✏️         [Archive] [⚡ Forge] ──┐
+│                                                                            │
+│  ┌─── Chat (flex-1) ────────────────────────┬── Context Panel (200-280px) ┐│
+│  │                                          │                              ││
+│  │  [🤖] Agent research response            │  Context                     ││
+│  │       with markdown formatting           │  ─────────                   ││
+│  │                                          │  brief.md          1.2kb     ││
+│  │                      [👤] User message   │  index.md  ●new    0.4kb     ││
+│  │                                          │                              ││
+│  │  [🤖] ●●● (typing)                      │                              ││
+│  │                                          │                              ││
+│  ├──────────────────────────────────────────┤                              ││
+│  │ [textarea              ] [→]             │                              ││
+│  │ Press Enter to send, Shift+Enter newline │                              ││
+│  └──────────────────────────────────────────┴──────────────────────────────┘│
+└────────────────────────────────────────────────────────────────────────────┘
+```
 
-## Approvals Page
+### Editable Project Name
 
-Separate page. Inbox for all pending approval requests (primarily from Maintain).
+- Click project name in breadcrumb → inline input
+- Enter saves (PATCH `/api/projects/{id}`), Escape cancels
+- Pencil icon on hover as affordance
 
-Each request shows:
-- Plain-English summary of what agent wants to do
-- Full reasoning + citations (source links, Lighthouse reports, PagerDuty alerts)
-- GitHub PR link + diff preview
-- Approve / Reject buttons
+### Chat Messages
 
-## Settings Page
+- User: right-aligned, User avatar, `bg-white/[0.08]` bubble
+- Agent: left-aligned, Zap avatar, `bg-white/[0.04]` bubble, markdown rendered
+- Empty messages not rendered
+- Typing indicator: Zap avatar + bouncing dots
 
-- **API Keys / Tokens:** GitHub token, Vercel token, Reddit API key, X API key, PagerDuty secret. Secure form. Encrypted in Postgres.
-- **Platform Constraints:** Hosting provider for generated apps (default: Vercel). Editable.
-- **Admin account:** Password change only.
+### Context Panel
+
+- Narrower (200px) when empty, expands to 280px with files
+- Shows file count badge in header
+- New files pulse blue dot
+- Each file shows icon + name + size
+
+### Forge Button
+
+- `bg-white text-black` in header row
+- Disabled until agent marks `readyToForge`
+- Triggers autonomous context-build → redirects to dashboard
+
+## Approvals Page (`/approvals`)
+
+### Layout
+
+- Title + subtitle explaining purpose
+- Approval cards list, each with:
+  - Type badge (colored pill: blue=SEO, cyan=AEO, amber=Deps, emerald=Content, red=Incident)
+  - Project link (blue-400, clickable)
+  - Title + description
+  - Approve button (emerald gradient) + Reject button (ghost with red hover)
+
+### Empty State
+
+- Inbox icon + "All clear" message
+- Explanation of what generates approvals
+- Tag pills: SEO Fixes, Dep Updates, Incident Patches, Content PRs, AEO Schema
+
+## Settings Page (`/settings`)
+
+- Four API key fields: NVIDIA, Tavily, GitHub, Vercel
+- Each with label, description, password input, eye toggle
+- Save button (white primary)
+- Platform section showing Vercel as active hosting target
+
+## Hard Stoppers
+
+When agent hits a blocker:
+1. Job status → BLOCKED in Postgres
+2. Card border turns red, badge shows `blocked`
+3. User clicks card → sees blocker info
+4. User provides missing input → job re-queued
+
+## Login Page (`/login`)
+
+- Centered layout with background glow effect
+- White Zap logo icon (black icon on white square)
+- "AppForge" title + "AI Software Factory" subtitle
+- Email + password form
+- White "Sign In" button
+- Single admin account: `admin@appforge.dev`
