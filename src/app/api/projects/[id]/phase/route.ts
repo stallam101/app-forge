@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { db } from "@/lib/db"
+import { launchECSTask } from "@/lib/ecs"
 import { STATUS_TO_PHASE } from "@/lib/phase"
-import type { ProjectStatus } from "@/types"
+import type { ProjectStatus, JobPhase } from "@/types"
 
 type Params = { id: string }
 
@@ -20,8 +21,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<Param
 
   const phase = STATUS_TO_PHASE[status]
   if (phase) {
-    await db.job.create({
+    const job = await db.job.create({
       data: { projectId: id, phase, status: "QUEUED" },
+    })
+
+    // Launch immediately — no cron needed
+    void launchECSTask(job.id, phase as JobPhase, id).catch(async (err) => {
+      await db.job.update({ where: { id: job.id }, data: { status: "FAILED" } })
+      await db.jobEvent.create({
+        data: { jobId: job.id, type: "error", message: String(err) },
+      })
     })
   }
 

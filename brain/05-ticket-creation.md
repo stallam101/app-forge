@@ -35,9 +35,10 @@ Each user message:
 After user submits, AppForge:
 1. Serializes the full `Message` table conversation into `brief.md` as a raw transcript
 2. Creates a `TICKET_CONTEXT_BUILD` job row (status: QUEUED) in Postgres
-3. Redirects user to dashboard; ticket appears in **Unforged** shelf with "Building..." state
+3. **Immediately launches an ECS Fargate task** via `launchECSTask()` — no cron or poller needed
+4. Redirects user to dashboard; ticket appears in **Unforged** shelf with "Building..." state
 
-Poller picks up the job → dispatches to the Brev agent service (OpenClaw + Nemotron 3 Super 120B via build.nvidia.com).
+The ECS container runs OpenClaw + Nemotron 3 Super 120B via `integrate.api.nvidia.com/v1`.
 
 The autonomous agent:
 1. Reads `brief.md` from S3 (contains the raw conversation transcript)

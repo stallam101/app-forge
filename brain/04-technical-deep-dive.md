@@ -1,6 +1,6 @@
 # AppForge — Technical Deep Dive
 
-> **Hackathon scope (2026-05-16):** The runtime is **Brev**, not AWS ECS. The "container" referenced in this doc is the OpenClaw process running inside an HTTP server on the Brev instance. The callback protocol (`POST /api/jobs/{jobId}/events` with Bearer JWT-style `JOB_TOKEN`) is unchanged. Only the **Research** phase is wired to a real agent for this hackathon.
+> **Runtime: AWS ECS Fargate.** Containers launch immediately from the API route — no cron or poller. All phases use `launchECSTask()` directly from their triggering route.
 
 ## Real-Time Updates (SSE)
 
@@ -8,7 +8,7 @@ Agent progress streams to the UI via Server-Sent Events.
 
 ### Flow
 ```
-Brev Agent (OpenClaw HTTP server)
+ECS Fargate container (OpenClaw + Nemotron)
   → POSTs progress event to /api/jobs/{jobId}/events (bearer token auth)
   → API route inserts JobEvent row in Postgres
   → Browser SSE connection (GET /api/jobs/{jobId}/stream) polls JobEvent table
@@ -83,52 +83,52 @@ Ticket creation chat uses **Vercel AI SDK + Sonnet** directly in a Next.js API r
 
 No BullMQ, no ECS, no queue for conversation turns. Conversation is live server-side streaming.
 
-On "Create Ticket": enqueues a `TICKET_CONTEXT_BUILD` job in Postgres → poller picks it up → Brev agent runs Nemotron via OpenClaw.
+On "Forge": serializes conversation to `brief.md`, creates `TICKET_CONTEXT_BUILD` job, immediately calls `launchECSTask()` — no poller needed.
 
-## Brev Agent Lifecycle (autonomous phases)
+## ECS Agent Lifecycle (autonomous phases)
 
 ```
-1. User moves project to phase (drag card or approve)
-2. POST /api/projects/[id]/phase
+1. User triggers phase:
+   - TICKET_CONTEXT_BUILD → POST /api/projects/[id]/create-ticket
+   - All other phases → POST /api/projects/[id]/phase (drag on kanban or approve)
+
+2. Route handler:
    a. Creates Job row (status: QUEUED)
    b. Updates Project.status
-3. Vercel Cron hits /api/cron/queue-poller every 60s
-   (or the user clicks POST /api/jobs/[jobId]/kick for instant demo dispatch)
-4. Poller: for each phase, if no RUNNING job exists, find oldest QUEUED job
-5. For TICKET_CONTEXT_BUILD and RESEARCH jobs — dispatchToBrev(job):
-   a. POST ${BREV_AGENT_URL}/run with body:
-      {
-        jobId,
-        phase,
-        projectId,
-        callbackUrl: APPFORGE_BASE_URL,
-        callbackToken: job.jobToken,
-        brief: "<contents of brief.md>"
-      }
-   b. Update Job.status = RUNNING
-6. For GENERATION and MAINTAIN_* jobs (1-hour scope) — skip dispatch:
-   a. Mark Job.status = BLOCKED
-   b. Insert JobEvent:
-      { type: "blocker",
-        message: "Configure {GitHub|Vercel} token in Settings to enable this phase" }
-   No call to Brev is made.
-7. Brev HTTP server receives /run:
-   a. Spawns OpenClaw with the phase prompt + brief
-   b. Streams stdout, parses key events, forwards to callback
-8. OpenClaw runs autonomously:
-   a. Reads context via filesystem MCP (or s3 MCP if configured)
+   c. Calls launchECSTask(jobId, phase, projectId) immediately — fire and forget
+
+3. launchECSTask():
+   a. Loads job + project from DB
+   b. Reads phase config from configs/openclaw/{phase}.json
+   c. Reads + interpolates prompt from configs/prompts/{phase}.md
+      ({PROJECT_ID}, {S3_PREFIX}, {JOB_ID}, {CALLBACK_URL}, {JOB_TOKEN})
+   d. Builds environment[] array with all secrets + AWS creds + NVIDIA_API_KEY + TAVILY_API_KEY
+   e. Sends RunTaskCommand to ECS Fargate (launchType: FARGATE, assignPublicIp: ENABLED)
+   f. Updates Job.status = RUNNING, stores ecsTaskArn
+
+4. ECS container (scripts/agent-entrypoint.sh):
+   a. Writes $OPENCLAW_CONFIG → /workspace/openclaw-runtime.json
+   b. Writes $AGENT_PROMPT → /workspace/prompt.md
+   c. Runs: openclaw --config /workspace/openclaw-runtime.json --prompt /workspace/prompt.md
+
+5. OpenClaw runs autonomously:
+   a. Reads context from S3 via s3 MCP (AWS_ACCESS_KEY_ID/SECRET/S3_BUCKET_NAME in env)
    b. Calls Nemotron 3 Super 120B at https://integrate.api.nvidia.com/v1
-   c. Uses tools (tavily web search, file_write, fetch)
+      using NVIDIA_API_KEY from env
+   c. Uses tools (tavily web search via TAVILY_API_KEY, filesystem MCP)
    d. POSTs progress events to $APPFORGE_CALLBACK_URL/api/jobs/$JOB_ID/events
-      with Bearer $JOB_TOKEN
+      with Authorization: Bearer $JOB_TOKEN
    e. On blocker: POSTs { type: "blocker", ... }, then exits
    f. On complete: POSTs { type: "complete", ... }, then exits
-9. SSE pushes events to the browser in real-time
+
+6. SSE pushes events to the browser in real-time
 ```
+
+**No cron poller required.** Jobs launch synchronously from the triggering route. On launch failure, the route's `.catch()` marks the job FAILED and inserts an error JobEvent.
 
 ## OpenClaw MCP Tool Configuration
 
-Phase configs live on the Brev instance at `/workspace/configs/openclaw/{phase}.json` — they are not injected via container env. The Brev instance has all MCP servers pre-installed; the config determines which are active.
+Phase configs live in the repo at `configs/openclaw/{phase}.json`. At launch time, `launchECSTask()` reads the config and passes it as `$OPENCLAW_CONFIG` env var to the container. The entrypoint writes it to `/workspace/openclaw-runtime.json` before running OpenClaw.
 
 Model config (all phases):
 ```json5
@@ -144,28 +144,9 @@ MCP servers by role:
 - **filesystem** — always loaded; rooted at the active project workspace.
 - **tavily** — research phase; web search via `TAVILY_API_KEY`.
 - **fetch** — research phase; HTTP fetch for URLs surfaced by search.
-- **s3** — optional. Only loaded when AWS creds are present on the Brev instance. Falls back to **filesystem** otherwise (same path layout, local `/workspace/context`).
-
-Hackathon Research-phase MCP servers:
-```json5
-mcpServers: {
-  filesystem: {
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-filesystem", "/workspace/projects/${PROJECT_ID}"]
-  },
-  tavily: {
-    command: "npx",
-    args: ["-y", "tavily-search-mcp"],
-    env: { TAVILY_API_KEY: "${TAVILY_API_KEY}" }
-  },
-  fetch: {
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-fetch"]
-  }
-}
-```
-
-Long-term (post-hackathon) MCP servers — github, playwright, bash — are documented in the phase docs but not wired this hackathon.
+- **s3** — always loaded; AWS creds injected via env. Reads/writes project context files at `{S3_PREFIX}/`.
+- **tavily** — research phase only; web search via `TAVILY_API_KEY`.
+- **filesystem** — fallback/local scratch at `/workspace/context`.
 
 ## Blocker Protocol
 
