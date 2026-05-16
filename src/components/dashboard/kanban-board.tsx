@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCenter } from "@dnd-kit/core"
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, closestCenter, useSensor, useSensors } from "@dnd-kit/core"
 import type { ProjectSummary, ProjectStatus } from "@/types"
 import { KanbanColumn } from "./kanban-column"
 import { ProjectCard } from "./project-card"
@@ -18,6 +18,7 @@ const COLUMNS: { id: ProjectStatus; label: string }[] = [
 const VALID_TRANSITIONS: Partial<Record<ProjectStatus, ProjectStatus[]>> = {
   READY:      ["RESEARCH"],
   RESEARCH:   ["GENERATION"],
+  GENERATION: ["MAINTAIN"],
 }
 
 const ACTIVE_JOB_STATUSES = ["RUNNING", "QUEUED"] as const
@@ -29,6 +30,9 @@ interface KanbanBoardProps {
 export function KanbanBoard({ initialProjects }: KanbanBoardProps) {
   const [projects, setProjects] = useState<ProjectSummary[]>(initialProjects)
   const [draggingId, setDraggingId] = useState<string | null>(null)
+
+  // Require 8px of movement before a drag activates — below this threshold, clicks go through normally
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
   const refresh = useCallback(async () => {
     const res = await fetch("/api/projects")
@@ -77,12 +81,9 @@ export function KanbanBoard({ initialProjects }: KanbanBoardProps) {
 
   /** Check if a project can be dragged at all (must have completed its current phase) */
   function canDrag(project: ProjectSummary): boolean {
-    // READY projects can drag if ideation is complete (ticket built)
     if (project.status === "READY") return project.ideationComplete
-    // RESEARCH projects can drag if their active job is COMPLETE
-    if (project.status === "RESEARCH") {
-      return project.activeJob?.status === "COMPLETE" || !project.activeJob
-    }
+    if (project.status === "RESEARCH") return project.activeJob?.status === "COMPLETE"
+    if (project.status === "GENERATION") return project.activeJob?.status === "COMPLETE"
     return false
   }
 
@@ -130,6 +131,7 @@ export function KanbanBoard({ initialProjects }: KanbanBoardProps) {
 
   return (
     <DndContext
+      sensors={sensors}
       collisionDetection={closestCenter}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}

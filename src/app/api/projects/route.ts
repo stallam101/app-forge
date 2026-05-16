@@ -49,7 +49,7 @@ export async function GET() {
         where: {
           OR: [
             { status: { in: [...ACTIVE_STATUSES] } },
-            { phase: "TICKET_CONTEXT_BUILD", status: "COMPLETE" },
+            { status: "COMPLETE" },
           ],
         },
         orderBy: { updatedAt: "desc" },
@@ -62,6 +62,8 @@ export async function GET() {
 
   const summaries: ProjectSummary[] = projects.map((p) => {
     const activeJob = p.jobs.find((j) => (ACTIVE_STATUSES as readonly string[]).includes(j.status))
+    // If no in-flight job, surface the most recent COMPLETE job so the UI knows the phase finished
+    const displayJob = activeJob ?? p.jobs.find((j) => j.status === "COMPLETE")
     const ideationComplete = p.jobs.some(
       (j) => j.phase === "TICKET_CONTEXT_BUILD" && j.status === "COMPLETE"
     )
@@ -73,13 +75,13 @@ export async function GET() {
       s3Prefix: p.s3Prefix,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
-      activeJob: activeJob
+      activeJob: displayJob
         ? {
-            id: activeJob.id,
-            phase: activeJob.phase as JobPhase,
-            status: activeJob.status as JobStatus,
-            updatedAt: activeJob.updatedAt,
-            lastMessage: activeJob.events[0]?.message,
+            id: displayJob.id,
+            phase: displayJob.phase as JobPhase,
+            status: displayJob.status as JobStatus,
+            updatedAt: displayJob.updatedAt,
+            lastMessage: displayJob.events[0]?.message,
           }
         : undefined,
       messageCount: p._count.messages ?? 0,
