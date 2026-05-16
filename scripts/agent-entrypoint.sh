@@ -3,6 +3,9 @@ set -e
 
 mkdir -p /workspace/context
 
+# Sync S3 context files to local workspace
+aws s3 sync "s3://$S3_BUCKET_NAME/$S3_PREFIX/" /workspace/context/ --quiet
+
 # Configure NVIDIA NIM as the model provider
 openclaw config patch --stdin <<EOF
 {
@@ -10,7 +13,14 @@ openclaw config patch --stdin <<EOF
     "providers": {
       "nvidia": {
         "baseUrl": "https://integrate.api.nvidia.com/v1",
-        "apiKey": "$NVIDIA_API_KEY"
+        "apiKey": "$NVIDIA_API_KEY",
+        "models": [
+          {
+            "id": "nvidia/nemotron-3-super-120b-a12b",
+            "name": "Nemotron 3 Super 120B",
+            "api": "openai-completions"
+          }
+        ]
       }
     }
   },
@@ -22,10 +32,12 @@ openclaw config patch --stdin <<EOF
 }
 EOF
 
-# Register MCP servers
+# Register filesystem MCP (reads/writes /workspace/context)
 openclaw mcp set filesystem '{"command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","/workspace/context"]}'
-openclaw mcp set s3 "{\"command\":\"npx\",\"args\":[\"-y\",\"mcp-s3\"],\"env\":{\"AWS_REGION\":\"$AWS_REGION\",\"AWS_ACCESS_KEY_ID\":\"$AWS_ACCESS_KEY_ID\",\"AWS_SECRET_ACCESS_KEY\":\"$AWS_SECRET_ACCESS_KEY\",\"S3_BUCKET\":\"$S3_BUCKET_NAME\"}}"
 
 # Write prompt and run agent
 printf '%s' "$AGENT_PROMPT" > /workspace/prompt.md
-openclaw agent --local --message "$(cat /workspace/prompt.md)"
+openclaw agent --local --session-id "$JOB_ID" --message "$(cat /workspace/prompt.md)"
+
+# Sync results back to S3
+aws s3 sync /workspace/context/ "s3://$S3_BUCKET_NAME/$S3_PREFIX/" --quiet
