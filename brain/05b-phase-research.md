@@ -1,5 +1,7 @@
 # AppForge — Phase: Research
 
+> **Hackathon Scope (1h):** REAL — the qualifying phase. OpenClaw + Nemotron 3 Super 120B on Brev.dev with web_search (Tavily) + file_write + fetch tools. The whole prize bet is on this working live on stage. See `hackathon-implementation-plan.md`.
+
 ## Purpose
 
 Take the product direction from ticket creation and go deep. Full autonomous market research, competitive analysis, tech stack validation, feature list, and monetization model. Research is the evidence layer — ticket creation gave direction, Research gives confidence.

@@ -1,5 +1,7 @@
 # AppForge — Phase: Generation
 
+> **Hackathon Scope (1h):** STUB — job enqueues then moves to BLOCKED with "Configure GitHub token in Settings to enable" message. No fake autonomy. Full design below is the production roadmap. See `hackathon-implementation-plan.md`.
+
 ## Purpose
 
 Build, test, and deploy the application described in ideation artifacts. Creates a GitHub repo, writes production-ready code, runs tests, and ships to Vercel via GitHub integration. Fully constrained to the target hosting platform.

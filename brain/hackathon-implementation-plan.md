@@ -1,186 +1,127 @@
-# AppForge Hackathon Implementation Plan
+# AppForge Hackathon Plan (v2 — Brev/OpenClaw/Nemotron, 1h)
 
-## Context
+## What changed from v1
 
-AppForge is a single-tenant AI software factory for the NVIDIA hackathon. User gives an idea → agents autonomously research, build, deploy, and maintain it. 4-person team, 7 hours (11am–6pm). Need a working end-to-end demo.
+v1 simulated autonomy with a fake agent runner; that breaks prize eligibility. ECS Fargate is dropped — compute runs on a Brev.dev GPU instance. We don't need real agents for every phase. Research is the qualifier and we make it bulletproof. Generation and Maintain are honest stubs (BLOCKED on missing tokens) and a pre-seeded MAINTAIN project — no faked autonomy.
 
-**Existing state:** Next.js 16 scaffolded, Prisma 7 configured (empty schema), docker-compose with Postgres, shadcn UI installed. No real application code yet.
+## Track choices
 
-**Key constraint:** 7 hours total. Must prioritize ruthlessly. Demo must show the full lifecycle working — ideation conversation → generation deploying a real app → maintain running at least one audit.
+| Track | Decision | Why |
+|---|---|---|
+| Cloud Track (Brev + OpenClaw + Nemotron) | YES — primary | Single deliverable unlocks prize eligibility; everything below is in service of this |
+| Edge Track (ASUS Ascent GX10) | NO | Hardware ramp-up does not fit a 1h window |
+| NemoClaw sandbox | STRETCH | Only if Research is locked at min 40 |
+| UCSC special prize | NO | Out of scope for our build |
 
----
+## Eligibility checklist
 
-## Sprint Plan (7 hours)
+- Agent runs on a Brev instance (Cloud Track)
+- Uses OpenClaw as the harness (not a custom loop)
+- Calls Nemotron via `https://integrate.api.nvidia.com/v1` (build.nvidia.com)
+- Demonstrates live tool use — minimum web search + file write
+- Demonstrates independent multi-step action — no human in the loop during the run
+- Is deployed and running at demo time, not a slideshow
 
-### Hour 0–1: Foundation (11am–12pm)
+## Architecture
 
-**Goal:** Database schema + API skeleton + basic UI shell. Everyone can build on top of this.
+```
+User → AppForge (Next.js, local for demo)
+         │
+         ├─ Ideation chat: Claude Sonnet via @ai-sdk/anthropic
+         │   (stretch: swap to Nemotron if <10 min remaining)
+         │
+         └─ Phase job queued → POST to Brev agent service
+                                  │
+                                  ▼
+                            Brev.dev GPU instance
+                              ├─ HTTP server on :8080 (wraps OpenClaw)
+                              ├─ OpenClaw daemon
+                              │   ├─ LLM: Nemotron 3 Super 120B (build.nvidia.com)
+                              │   └─ Tools: web_search (Tavily), file_write, fetch
+                              └─ Callback → AppForge /api/jobs/[jobId]/events
+                                  (Authorization: Bearer {JOB_TOKEN})
+```
 
-| Task | Owner | Details |
-|------|-------|---------|
-| Prisma schema | 1 person | All tables from `04-technical-deep-dive.md`: projects, phase_jobs, ideation_messages, job_logs, secrets, approval_requests, artifacts_index |
-| API route skeleton | 1 person | All routes from backend structure in `04-technical-deep-dive.md` — stubs returning 200, wired to db |
-| UI shell | 1 person | Layout with sidebar nav: Kanban, Approvals, Settings pages. Kanban with 5 columns (empty). Use shadcn components. |
-| Agent runner abstraction | 1 person | `src/lib/agent-runner.ts` — abstraction that can invoke OpenClaw/Nemotron. For hackathon: runs as subprocess (not ECS). Takes project context, returns output. |
+Storage: S3 if creds exist, else local `./projects/{id}/` on Brev. Same wiki layout either way.
 
-**Files to create:**
-- `prisma/schema.prisma` — full schema
-- `src/app/(dashboard)/layout.tsx` — dashboard shell
-- `src/app/(dashboard)/page.tsx` — kanban board
-- `src/app/(dashboard)/approvals/page.tsx` — approvals inbox
-- `src/app/(dashboard)/settings/page.tsx` — API key management
-- `src/app/api/projects/route.ts` — CRUD
-- `src/app/api/projects/[id]/route.ts`
-- `src/app/api/projects/[id]/stream/route.ts` — SSE
-- `src/lib/agent-runner.ts` — agent execution abstraction
+## Critical risks
 
----
+- **HIGH — Brev access:** P1 starts immediately; nothing else demos without `BREV_AGENT_URL`
+- **HIGH — NVIDIA API key in hand by min 5:** blocks the entire eligibility path; team-wide blocker until resolved
+- **HIGH — OpenClaw config + tool wiring is unknown territory:** docs at `nvidia.com/clawhelp` are the source of truth; budget time for trial and error
+- **MED — Ideation still uses Claude:** acceptable; the agent running on Brev is the autonomous part the judges evaluate
+- **MED — Generation/Maintain as honest stubs, not fake autonomy:** disqualification risk if we fake; we ship "Configure token" BLOCKED states and a seeded MAINTAIN project instead
 
-### Hour 1–3: Core Flows (12pm–2pm)
+## File / Task Ownership (4 people, 1 hour)
 
-**Goal:** Kanban board works. Projects can be created, moved between phases. Ideation chat panel functional.
+### Person 1 — Brev / OpenClaw / Nemotron (the prize-eligibility unlock)
 
-| Task | Owner | Details |
-|------|-------|---------|
-| Kanban board | 1 person | Drag-and-drop cards between columns. Real-time badge updates. Create project modal (name + one-line idea). Wire to API. |
-| Ideation chat panel | 1 person | `/projects/[id]/chat` page. Message list + composer. Send message → POST to API → triggers agent. SSE for streaming response. |
-| Ideation agent prompt | 1 person | Write the ideation prompt template. Wire to agent-runner. Agent does market research via web search, responds conversationally, writes context files. |
-| S3/context engine | 1 person | `src/lib/context.ts` — for hackathon, use local filesystem (`./projects/{id}/`) instead of S3. Same file structure (brief.md, index.md, project-context.md, etc). Seeding logic on project create. |
+Provision Brev instance, install OpenClaw per `nvidia.com/clawhelp`, configure `configs/research.openclaw.json` pointing at `https://integrate.api.nvidia.com/v1` with Nemotron 3 Super 120B, enable tools (`web_search`, `file_write`, `fetch`). Wrap OpenClaw invocation in an HTTP server on :8080 with `POST /run` body `{jobId, phase, projectId, callbackUrl, callbackToken, brief}`. Expose port publicly, share `BREV_AGENT_URL`.
 
-**Files to create:**
-- `src/app/(dashboard)/projects/[id]/chat/page.tsx`
-- `src/components/kanban/board.tsx`
-- `src/components/kanban/card.tsx`
-- `src/components/kanban/column.tsx`
-- `src/components/chat/message-list.tsx`
-- `src/components/chat/composer.tsx`
-- `src/lib/context.ts` — context engine (local FS for hackathon)
-- `src/lib/prompts/ideation.ts` — prompt template
-- `src/app/api/projects/[id]/ideation/message/route.ts`
+**Deliverable by min 30:** `BREV_AGENT_URL` + `NVIDIA_API_KEY` in `.env` + screenshot of a successful Nemotron research run posting back to the callback.
 
----
+### Person 2 — AppForge ↔ Brev wiring
 
-### Hour 3–4.5: Generation Phase (2pm–3:30pm)
+- `src/lib/agent-runner.ts` *(new)* — `dispatchToBrev(job)` POSTs to `${BREV_AGENT_URL}/run`
+- `src/app/api/cron/queue-poller/route.ts` — replace ECS launch with `dispatchToBrev` for Research; mark Generation and Maintain jobs as `BLOCKED` with message `"Configure {GitHub|Vercel} token in Settings to enable this phase"`
+- `src/app/api/jobs/[jobId]/events/route.ts` — verify Bearer-token auth works with what P1 sends
+- `src/app/api/jobs/[jobId]/kick/route.ts` *(new)* — one-click demo firing endpoint, no cron wait
+- `.env.example` — add `BREV_AGENT_URL`, `NVIDIA_API_KEY`, `NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1`, `TAVILY_API_KEY`
 
-**Goal:** Generation agent can take ideation output and actually build + deploy an app.
+Coordinates with P1 on event payload shape (event types, metadata fields, artifact upload).
 
-| Task | Owner | Details |
-|------|-------|---------|
-| Generation agent prompt | 1 person | Prompt that reads ideation artifacts, creates GitHub repo, writes code, pushes. Uses Nemotron for code gen. |
-| GitHub integration | 1 person | `src/lib/github.ts` — create repo, commit files, push. Uses user's GITHUB_TOKEN from settings. |
-| Vercel deploy verification | 1 person | After GitHub push, poll Vercel API for deployment status. Write deployment URL back to context. |
-| Phase transition UI | 1 person | Approve button on ideation complete → queues generation. Progress display (SSE streaming logs). |
+### Person 3 — Project detail views (the money shot)
 
-**Files to create:**
-- `src/lib/prompts/generation.ts`
-- `src/lib/github.ts`
-- `src/lib/vercel.ts`
-- `src/app/api/projects/[id]/approve/route.ts`
+- `src/app/(dashboard)/projects/[id]/page.tsx` — switch on `project.status`
+- `src/app/(dashboard)/projects/[id]/ticket-building-view.tsx` — auto-advance on complete
+- `src/app/(dashboard)/projects/[id]/project-brief-view.tsx` — render brief + "Send to Research" button
+- `src/app/(dashboard)/projects/[id]/research-view.tsx` *(new)* — render real research artifacts streaming via SSE: structured sections, competitor matrix, citations. This is the demo's money shot.
+- `src/app/(dashboard)/projects/[id]/generation-view.tsx` *(new)* — honest "Configure GitHub token to unlock" CTA
+- `src/app/(dashboard)/projects/[id]/maintain-view.tsx` *(new)* — same pattern
+- `src/components/phase-timeline.tsx` *(new)* — horizontal phase pills reused across views
 
----
+### Person 4 — Approvals, kanban, seed, demo prep, merge
 
-### Hour 4.5–5.5: Maintain Phase (3:30pm–4:30pm)
+- `src/app/(dashboard)/approvals/page.tsx` — list + Approve / Reject cards
+- `src/app/api/approvals/[id]/route.ts` — `PATCH`; on approve, advance phase
+- `src/components/kanban/card.tsx` — status colors + last-event one-liner
+- `src/components/kanban/board.tsx` — 2s `setInterval` auto-refresh while any project is `RUNNING`
+- `prisma/seed.ts` — seed `demo@appforge.dev` / `demo1234`; one project in `MAINTAIN` state with completed brief + research artifacts + 1 `PENDING` approval (so kanban isn't empty at demo start)
+- `src/app/(dashboard)/settings/page.tsx` — minimal form: `NVIDIA_API_KEY`, `GITHUB_TOKEN`, `VERCEL_TOKEN`, `TAVILY_KEY` (wired to existing `/api/secrets`)
+- `brain/demo-script.md` *(new)* — exact click flow + fallback narration
+- Owns merge resolution at min 50 + last-10-min Playwright smoke test
 
-**Goal:** Maintain agent runs one audit cycle — SEO + opens a PR.
+## Timeline
 
-| Task | Owner | Details |
-|------|-------|---------|
-| Maintain agent prompt | 1 person | Reads deployed URL, crawls with fetch (not full Playwright for hackathon), audits SEO basics, opens PR with fixes. |
-| Approvals UI | 1 person | Render approval requests from maintain. Show summary, PR link, approve/reject buttons. |
-| Cron trigger | 1 person | Manual "Run Maintain" button for demo (skip actual Vercel Cron). Triggers maintain job. |
-| Maintain output display | 1 person | Show audit reports in project detail view. Link to GitHub PRs. |
+| Min | P1 — Brev | P2 — Wiring | P3 — Detail Views | P4 — Glue |
+|---|---|---|---|---|
+| 0–10 | Provision Brev, install OpenClaw | Scaffold `dispatchToBrev`, env vars | Scaffold 4 new view files + phase-timeline | Seed user + project skeleton |
+| 10–25 | Wire Nemotron + tools, smoke test `POST /run` | Replace ECS launch, kick route, callback auth | research-view streaming from SSE | Approvals page real, settings form |
+| 25–40 | HTTP wrapper + callback events | E2E: ticket → brief → dispatch to Brev | brief-view + generation/maintain BLOCKED CTA | Kanban polish + auto-refresh |
+| 40–50 | Tighten event payloads with P3 | Help P3 verify events render | Maintain view + loading states | Final seed state + demo script |
+| 50–60 | Merge to main, P4 resolves conflicts, `npm run build` green, full smoke test on a fresh seed, lock the demo |
 
-**Files to create:**
-- `src/lib/prompts/maintain.ts`
-- `src/components/approvals/approval-card.tsx`
-- `src/app/api/cron/maintain/route.ts`
+## Demo script (~5 min)
 
----
+1. Open dashboard — kanban populated by P4 seed, one project in MAINTAIN
+2. **+ New Project** → "AI flashcards for med students"
+3. 2-turn ideation chat (Claude Sonnet via AI SDK)
+4. **Create Ticket** — context build runs (real Brev/OpenClaw call), ticket lands in Ready shelf
+5. **Drag to Research** — narrate: *"OpenClaw on Brev kicks in with Nemotron 3 Super."*
+6. research-view streams in: real Nemotron output, cited Tavily web search, structured sections — **pause and narrate, this is the eligibility moment**
+7. Flip to second monitor: OpenClaw logs on the Brev instance — prove autonomy is live
+8. Side panel: open `research/competitor-matrix.md` and `research/findings.md` written by the agent
+9. **Approve** → Generation view → honest "Configure tokens to unlock" stub (same harness, gated on GitHub token)
+10. **Approvals page** → approve the seeded Maintain SEO PR → kanban updates
 
-### Hour 5.5–6.5: Polish + Demo Prep (4:30pm–5:30pm)
+## Cut list at min 40
 
-| Task | Details |
-|------|---------|
-| UI polish | Animations, loading states, error states. Make kanban look great. |
-| End-to-end test | Run full flow: create project → ideation chat → approve → generation builds → maintain audits |
-| Fix bugs | Whatever broke during integration |
-| Demo script | Write the exact demo flow, pre-seed a project if needed for speed |
+1. Drop Nemotron-for-ideation swap — keep Claude for chat
+2. Drop generation-view + maintain-view — replace with bare "Configure tokens to unlock" placeholders, no lock-icon polish
+3. Drop drag-and-drop — phase advance via button only
+4. Drop NemoClaw sandbox bonus
+5. Last resort if Brev breaks at min 55: pre-recorded Brev research run with timestamps, narrated over live Brev logs in a second window
 
----
+## Production vs hackathon
 
-### Hour 6.5–7: Buffer (5:30pm–6pm)
-
-Emergency bug fixes, final touches, submission prep.
-
----
-
-## Hackathon Simplifications (vs Production Design)
-
-| Production (brain docs) | Hackathon | Why |
-|------------------------|-----------|-----|
-| ECS Fargate containers | Local subprocess / direct API call | No time to configure ECS |
-| S3 for context | Local filesystem `./projects/` | Same structure, no AWS setup |
-| BullMQ job queue | Direct async execution | No need for queue with 1 user |
-| SSE via Postgres polling | Direct SSE from agent stdout | Simpler, works for demo |
-| AES-256 encrypted secrets | Plain env vars / .env.local | Single tenant, demo only |
-| PagerDuty webhooks | Manual "trigger maintain" button | Can't demo real incidents |
-| Full Playwright crawling | fetch + cheerio for SEO audit | Lighter, faster |
-| Per-turn ECS containers (ideation) | Single long-lived process per conversation | Simpler for hackathon |
-
----
-
-## NVIDIA Nemotron Integration
-
-The hackathon requires NVIDIA Nemotron. Integration points:
-
-1. **Ideation agent** — Nemotron powers the conversational research (market analysis, competitor identification)
-2. **Generation agent** — Nemotron generates the application code
-3. **Maintain agent** — Nemotron analyzes SEO issues and generates fix PRs
-
-All via OpenClaw CLI which routes to Nemotron as the underlying LLM.
-
----
-
-## Demo Script (what judges see)
-
-1. **Create project** — "I want a habit tracker app for developers"
-2. **Ideation chat** — Agent researches market, asks clarifying questions, user responds 2-3 times, agent finalizes brief
-3. **Approve → Generation** — User approves, generation agent creates GitHub repo, writes code, deploys to Vercel
-4. **Live app** — Show the deployed habit tracker working on Vercel
-5. **Maintain** — Trigger maintain audit. Agent crawls deployed app, finds SEO issues, opens PR with fixes
-6. **Approvals** — Show PR in approvals page, approve it
-
-Total demo time: ~5–7 minutes showing the full autonomous lifecycle.
-
----
-
-## Critical Path (what MUST work)
-
-1. Kanban board with project creation
-2. Ideation chat with real Nemotron responses
-3. Generation actually deploying something to Vercel
-4. At least one maintain PR opened
-
-If time is short, cut in this order: maintain polish → generation tests → ideation multi-turn → kanban drag-and-drop (use buttons instead).
-
----
-
-## Tech Stack (hackathon)
-
-- **Frontend:** Next.js 16, React 19, Tailwind 4, shadcn/ui
-- **Backend:** Next.js API routes, Prisma 7, Postgres (docker-compose)
-- **Agent runtime:** OpenClaw CLI with Nemotron
-- **Context store:** Local filesystem (same markdown structure as S3 design)
-- **External:** GitHub API, Vercel API
-- **Deploy AppForge itself:** Local dev server for demo (or Vercel if time permits)
-
----
-
-## Verification
-
-After implementation:
-1. `npm run build` — zero errors
-2. `npm run dev` — app loads
-3. Create a project → ideation chat works → approve → generation runs → app deploys → maintain opens PR
-4. No console errors in browser
-5. Demo script runs smooth end-to-end in under 7 minutes
+The brain docs describe the production target (autonomous Research + Generation + Maintain, S3 + RDS, encrypted secrets, deploy pipeline). Each phase doc declares HACKATHON SCOPE (REAL / STUB / SEED-ONLY) at its top. Production design — ECS, RDS, full agent coverage — is roadmap, not 1-hour scope.

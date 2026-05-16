@@ -1,5 +1,7 @@
 # AppForge — Context Engine
 
+> **Hackathon Scope (1h):** Storage is S3 if AWS creds exist, else local /workspace/context on the Brev instance. Same wiki layout either way. See `hackathon-implementation-plan.md`.
+
 The Context Engine powers all agent intelligence in AppForge. Every phase agent reads from it, writes to it, and leaves it richer than it found it. Based on Karpathy's LLM wiki pattern: immutable raw sources + agent-owned wiki + index as catalog + append-only log.
 
 ## Core Idea
@@ -20,6 +22,10 @@ projects/{project-id}/
 ```
 
 Everything else is agent-created, agent-named, in whatever folder structure the project needs.
+
+Hackathon: agent writes to local FS at /workspace/context on the Brev instance.
+Same path layout.
+Promotes to S3 in prod.
 
 ## Agent-Created Files
 

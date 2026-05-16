@@ -1,5 +1,7 @@
 # AppForge — Phase: Maintain
 
+> **Hackathon Scope (1h):** SEED-ONLY — a pre-seeded demo project sits in MAINTAIN state with one PENDING approval. No live agent run in 1h scope. Full design below is the production roadmap. See `hackathon-implementation-plan.md`.
+
 ## Purpose
 
 Keep the deployed application healthy, visible, and improving. Runs on a cron schedule and in response to production incidents. Handles SEO, AEO, X posting, performance, security, and incident response.

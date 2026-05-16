@@ -1,5 +1,7 @@
 # AppForge — Interface
 
+> **Hackathon Scope (1h):** Drag-and-drop is in the cut list — phase advance via button in 1h scope. Kanban + Research view ship as money-shot UI; Generation and Maintain detail views are honest stub placeholders. See `hackathon-implementation-plan.md`.
+
 ## Dashboard Layout
 
 ```
@@ -21,6 +23,8 @@ Research | Generation | Maintain | Archived
 ```
 
 One project card per column can be actively running at a time — others queue behind it within that column.
+
+Hackathon 1h: drag-and-drop deferred; phase advance by button click. Auto-refresh kanban every 2s while any project is RUNNING.
 
 ## Card States
 

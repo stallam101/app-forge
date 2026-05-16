@@ -1,5 +1,7 @@
 # AppForge — Ticket Creation
 
+> **Hackathon Scope (1h):** REAL — Claude Sonnet via Vercel AI SDK already wired (Nemotron swap optional, only if <10 min). Context build dispatches to Brev/OpenClaw/Nemotron. See `hackathon-implementation-plan.md`.
+
 ## Purpose
 
 Turn a raw idea into a structured product direction through a multi-turn conversation with an OpenClaw agent. Produces the foundation context that Research builds on. One-time and permanent — once submitted, the conversation cannot be revisited.
@@ -35,7 +37,7 @@ After user submits, AppForge:
 2. Creates a `TICKET_CONTEXT_BUILD` job row (status: QUEUED) in Postgres
 3. Redirects user to dashboard; ticket appears in **Unforged** shelf with "Building..." state
 
-Vercel Cron picks up the job → launches ECS Fargate task with Nemotron 3 Super 120B via OpenClaw.
+Poller picks up the job → dispatches to the Brev agent service (OpenClaw + Nemotron 3 Super 120B via build.nvidia.com).
 
 The autonomous agent:
 1. Reads `brief.md` from S3 (contains the raw conversation transcript)

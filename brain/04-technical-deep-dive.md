@@ -1,12 +1,14 @@
 # AppForge — Technical Deep Dive
 
+> **Hackathon scope (2026-05-16):** The runtime is **Brev**, not AWS ECS. The "container" referenced in this doc is the OpenClaw process running inside an HTTP server on the Brev instance. The callback protocol (`POST /api/jobs/{jobId}/events` with Bearer JWT-style `JOB_TOKEN`) is unchanged. Only the **Research** phase is wired to a real agent for this hackathon.
+
 ## Real-Time Updates (SSE)
 
 Agent progress streams to the UI via Server-Sent Events.
 
 ### Flow
 ```
-ECS Agent Container
+Brev Agent (OpenClaw HTTP server)
   → POSTs progress event to /api/jobs/{jobId}/events (bearer token auth)
   → API route inserts JobEvent row in Postgres
   → Browser SSE connection (GET /api/jobs/{jobId}/stream) polls JobEvent table
@@ -28,14 +30,14 @@ ECS Agent Container
 ### Agent Callback
 `POST /api/jobs/[jobId]/events`
 - Agent sends: `{ type, message, metadata }` with `Authorization: Bearer {JOB_TOKEN}`
-- `JOB_TOKEN` is a unique CUID stored on the `Job` row, injected into ECS task env vars at launch
+- `JOB_TOKEN` is a unique CUID stored on the `Job` row, included in the `POST /run` body sent to the Brev Agent (OpenClaw HTTP server). The Brev HTTP wrapper passes it into the OpenClaw process env.
 - On `complete`: updates `Job.status = 'COMPLETE'`
 - On `error`: updates `Job.status = 'FAILED'`
 - On `blocker`: updates `Job.status = 'BLOCKED'`
 
 ### Progress Reporting — Agentic
 
-Agent narrates its own progress using bash MCP to curl the callback URL before each major step. No deterministic checkpoints — Nemotron decides when to report.
+Agent narrates its own progress using bash MCP to curl the callback URL before each major step. No deterministic checkpoints — Nemotron decides when to report. The agent runs on Brev, so `$APPFORGE_CALLBACK_URL` points back at AppForge.
 
 Prompt instruction baked into every phase:
 ```bash
@@ -43,7 +45,7 @@ Prompt instruction baked into every phase:
 curl -s -X POST "$APPFORGE_CALLBACK_URL/api/jobs/$JOB_ID/events" \
   -H "Authorization: Bearer $JOB_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"type\":\"progress\",\"message\":\"Scanning Reddit for freelancer pain points...\"}"
+  -d "{\"type\":\"progress\",\"message\":\"Scanning web for competitors...\"}"
 ```
 
 Event types:
@@ -81,46 +83,54 @@ Ticket creation chat uses **Vercel AI SDK + Sonnet** directly in a Next.js API r
 
 No BullMQ, no ECS, no queue for conversation turns. Conversation is live server-side streaming.
 
-On "Create Ticket": enqueues a `TICKET_CONTEXT_BUILD` job in Postgres → Vercel Cron picks it up → ECS task runs Nemotron via OpenClaw.
+On "Create Ticket": enqueues a `TICKET_CONTEXT_BUILD` job in Postgres → poller picks it up → Brev agent runs Nemotron via OpenClaw.
 
-## Container Lifecycle (autonomous phases)
+## Brev Agent Lifecycle (autonomous phases)
 
 ```
 1. User moves project to phase (drag card or approve)
 2. POST /api/projects/[id]/phase
-   a. Creates Job row (status: QUEUED, phase: RESEARCH|GENERATION|MAINTAIN_*)
+   a. Creates Job row (status: QUEUED)
    b. Updates Project.status
 3. Vercel Cron hits /api/cron/queue-poller every 60s
+   (or the user clicks POST /api/jobs/[jobId]/kick for instant demo dispatch)
 4. Poller: for each phase, if no RUNNING job exists, find oldest QUEUED job
-5. API route (launchECSTask):
-   a. Load Job + Project from Postgres
-   b. Decrypt all Setting rows (AES-256)
-   c. Read phase config from configs/openclaw/{phase}.json
-   d. Read prompt template from configs/prompts/{phase}.md, inject PROJECT_ID, S3_PREFIX, JOB_ID
-   e. ECS RunTask:
-      - Single task definition (all phases share one image)
-      - launchType: FARGATE
-      - Environment vars: JOB_ID, PROJECT_ID, JOB_TOKEN, S3_PREFIX, OPENCLAW_CONFIG (JSON string),
-        AGENT_PROMPT, APPFORGE_CALLBACK_URL, all decrypted secrets
-   f. Update Job.status = RUNNING, Job.ecsTaskArn
-6. Container starts (entrypoint.sh):
-   a. Writes $OPENCLAW_CONFIG to /workspace/openclaw.json
-   b. Writes $AGENT_PROMPT to /workspace/prompt.md
-   c. Runs: openclaw --config /workspace/openclaw.json --prompt /workspace/prompt.md
-7. OpenClaw runs autonomously:
-   a. Uses S3 MCP server to read context files (platform-constraints.md → index.md → project-context.md → selective)
-   b. POSTs progress events to $APPFORGE_CALLBACK_URL/api/jobs/$JOB_ID/events with Bearer $JOB_TOKEN
-   c. Writes output files via S3 MCP server
-   d. On blocker: POSTs { type: "blocker", message, metadata: { required: "key_name" } }, then exits
-   e. On complete: POSTs { type: "complete", message }, then exits
-8. SSE pushes events to browser in real-time
+5. For TICKET_CONTEXT_BUILD and RESEARCH jobs — dispatchToBrev(job):
+   a. POST ${BREV_AGENT_URL}/run with body:
+      {
+        jobId,
+        phase,
+        projectId,
+        callbackUrl: APPFORGE_BASE_URL,
+        callbackToken: job.jobToken,
+        brief: "<contents of brief.md>"
+      }
+   b. Update Job.status = RUNNING
+6. For GENERATION and MAINTAIN_* jobs (1-hour scope) — skip dispatch:
+   a. Mark Job.status = BLOCKED
+   b. Insert JobEvent:
+      { type: "blocker",
+        message: "Configure {GitHub|Vercel} token in Settings to enable this phase" }
+   No call to Brev is made.
+7. Brev HTTP server receives /run:
+   a. Spawns OpenClaw with the phase prompt + brief
+   b. Streams stdout, parses key events, forwards to callback
+8. OpenClaw runs autonomously:
+   a. Reads context via filesystem MCP (or s3 MCP if configured)
+   b. Calls Nemotron 3 Super 120B at https://integrate.api.nvidia.com/v1
+   c. Uses tools (tavily web search, file_write, fetch)
+   d. POSTs progress events to $APPFORGE_CALLBACK_URL/api/jobs/$JOB_ID/events
+      with Bearer $JOB_TOKEN
+   e. On blocker: POSTs { type: "blocker", ... }, then exits
+   f. On complete: POSTs { type: "complete", ... }, then exits
+9. SSE pushes events to the browser in real-time
 ```
 
 ## OpenClaw MCP Tool Configuration
 
-Phase config is a JSON5 file (`configs/openclaw/{phase}.json`) injected via `OPENCLAW_CONFIG` env var. The Docker image has all MCP servers pre-installed; the config determines which are active.
+Phase configs live on the Brev instance at `/workspace/configs/openclaw/{phase}.json` — they are not injected via container env. The Brev instance has all MCP servers pre-installed; the config determines which are active.
 
-Model config for all phases:
+Model config (all phases):
 ```json5
 model: {
   provider: "openai-completions",
@@ -130,54 +140,48 @@ model: {
 }
 ```
 
-MCP server examples:
+MCP servers by role:
+- **filesystem** — always loaded; rooted at the active project workspace.
+- **tavily** — research phase; web search via `TAVILY_API_KEY`.
+- **fetch** — research phase; HTTP fetch for URLs surfaced by search.
+- **s3** — optional. Only loaded when AWS creds are present on the Brev instance. Falls back to **filesystem** otherwise (same path layout, local `/workspace/context`).
+
+Hackathon Research-phase MCP servers:
 ```json5
 mcpServers: {
-  s3: {
+  filesystem: {
     command: "npx",
-    args: ["-y", "mcp-s3"],
-    env: {
-      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}",
-      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}",
-      AWS_REGION: "${AWS_REGION}",
-      S3_BUCKET: "${S3_BUCKET_NAME}",
-    }
-  },
-  github: {
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-github"],
-    env: { GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}" }
-  },
-  playwright: {
-    command: "npx",
-    args: ["-y", "@executeautomation/mcp-playwright"],
-    env: { PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright" }
-  },
-  bash: {
-    command: "npx",
-    args: ["-y", "mcp-bash"]
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "/workspace/projects/${PROJECT_ID}"]
   },
   tavily: {
     command: "npx",
     args: ["-y", "tavily-search-mcp"],
     env: { TAVILY_API_KEY: "${TAVILY_API_KEY}" }
+  },
+  fetch: {
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-fetch"]
   }
 }
 ```
 
+Long-term (post-hackathon) MCP servers — github, playwright, bash — are documented in the phase docs but not wired this hackathon.
+
 ## Blocker Protocol
 
 When OpenClaw hits a hard stopper:
-1. POSTs `{ type: "blocker", message: "...", metadata: { required: "REDDIT_API_KEY" } }` to callback URL
-2. Container exits
+1. POSTs `{ type: "blocker", message: "...", metadata: { required: "TAVILY_API_KEY" } }` to callback URL
+2. OpenClaw process exits
 3. API route updates `Job.status = 'BLOCKED'`
 4. SSE pushes blocker event to browser
 5. Kanban card turns red (`border-[#ef4444]`)
 
 On user resolution:
 1. User enters missing info (API key, decision) via card modal
-2. API route updates Setting (if API key), re-creates Job row (status: QUEUED) with resolution context in prompt
-3. Cron picks up new job, relaunches ECS task
+2. API route updates `Setting` (if API key), creates a new `Job` row (status: QUEUED) with resolution context appended to the prompt
+3. Poller picks up the new job, dispatches to Brev again
+
+**Hackathon note:** Generation and Maintain phases auto-blocker on the AppForge side without even dispatching to Brev. The blocker message is `"Configure {GitHub|Vercel} token in Settings to enable."`
 
 ## Backend Structure (Next.js App Router)
 
@@ -210,20 +214,21 @@ src/
           events/route.ts           ← POST: agent callback (bearer token)
           stream/route.ts           ← GET: SSE stream of job events
           status/route.ts           ← GET: poll job status
+          kick/route.ts             ← POST: one-click dispatch without waiting on cron (demo)
       approvals/
         route.ts                    ← POST: agent creates approval request
         [id]/route.ts               ← PATCH: approve/reject
       webhooks/
         pagerduty/route.ts          ← POST: incoming PagerDuty events → priority MAINTAIN_INCIDENT job
       cron/
-        queue-poller/route.ts       ← GET: Vercel Cron, launches queued ECS tasks
+        queue-poller/route.ts       ← GET: poller — dispatches queued jobs to Brev (RESEARCH only this hackathon)
   middleware.ts                     ← protect all routes except /login and /api/auth/*
   lib/
     db.ts                           ← Prisma v7 singleton (PrismaPg adapter)
     auth.ts                         ← JWT sign/verify (jose), getCurrentUser, createSession
     secrets.ts                      ← AES-256 encrypt/decrypt (Node.js crypto)
-    s3.ts                           ← S3 client + put/get/list helpers
-    ecs.ts                          ← launchECSTask() — RunTask wrapper
+    s3.ts                           ← S3 client (unused in hackathon — local FS on Brev instead)
+    agent-runner.ts                 ← dispatchToBrev() — HTTP POST to Brev agent /run
     utils.ts                        ← cn() classname merger
   types/
     index.ts                        ← shared TS types (ProjectStatus, JobPhase, etc.)
