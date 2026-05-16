@@ -63,6 +63,7 @@ export async function launchECSTask(jobId: string, phase: JobPhase, projectId: s
 
   const environment = [
     { name: "PROJECT_ID", value: projectId },
+    { name: "PHASE", value: phase },
     { name: "JOB_ID", value: jobId },
     { name: "JOB_TOKEN", value: job.jobToken },
     { name: "S3_PREFIX", value: project.s3Prefix },

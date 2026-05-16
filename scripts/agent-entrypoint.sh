@@ -32,8 +32,14 @@ openclaw config patch --stdin <<EOF
 }
 EOF
 
-# Register filesystem MCP (reads/writes /workspace/context)
+# Always: filesystem MCP + bash MCP (for progress curl callbacks)
 openclaw mcp set filesystem '{"command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","/workspace/context"]}'
+openclaw mcp set bash '{"command":"npx","args":["-y","mcp-shell"]}'
+
+# Research phase: also add Tavily for web search
+if [ "$PHASE" = "RESEARCH" ]; then
+  openclaw mcp set tavily "{\"command\":\"npx\",\"args\":[\"-y\",\"tavily-mcp\"],\"env\":{\"TAVILY_API_KEY\":\"$TAVILY_API_KEY\"}}"
+fi
 
 # Write prompt and run agent
 printf '%s' "$AGENT_PROMPT" > /workspace/prompt.md
