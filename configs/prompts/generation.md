@@ -7,6 +7,15 @@
 - CALLBACK_URL: {CALLBACK_URL}
 - JOB_TOKEN: {JOB_TOKEN}
 
+## Pre-configured Environment Variables (DO NOT request these — they are already set)
+- `NVIDIA_API_KEY` — model provider, already configured
+- `TAVILY_API_KEY` — web search, already configured
+- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `S3_BUCKET_NAME` — S3 access, already configured
+- `GITHUB_TOKEN` — GitHub access, already configured
+- `VERCEL_TOKEN` — Vercel CLI access, already configured
+
+Do NOT post CREDENTIAL_REQUEST for any of the above. They are pre-injected into this container.
+
 ## Progress Reporting
 
 ```bash
