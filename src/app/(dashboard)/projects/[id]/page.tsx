@@ -13,16 +13,7 @@ import type { JobStatus } from "@/types"
 
 type Params = { id: string }
 
-const RESEARCH_ARTIFACT_KEYS = [
-  "research/findings.md",
-  "research/competitors.md",
-  "research/market-analysis.md",
-  "research/tech-stack.md",
-  "research/monetization.md",
-  "research/reddit-findings.md",
-  "research/features.md",
-  "research/x-findings.md",
-]
+const RESEARCH_ARTIFACT_KEYS = ["research.md"]
 
 export default async function ProjectDetailPage({ params }: { params: Promise<Params> }) {
   const user = await getCurrentUser()

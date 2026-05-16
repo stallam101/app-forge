@@ -29,30 +29,14 @@ interface ResearchViewProps {
   initialArtifacts: ArtifactEntry[]
 }
 
-const ARTIFACT_KEYS = [
-  "research/findings.md",
-  "research/competitors.md",
-  "research/market-analysis.md",
-  "research/tech-stack.md",
-  "research/monetization.md",
-  "research/reddit-findings.md",
-  "research/features.md",
-  "research/x-findings.md",
-]
+const ARTIFACT_KEYS = ["research.md"]
 
 const ARTIFACT_LABELS: Record<string, string> = {
-  "research/findings.md": "Findings",
-  "research/competitors.md": "Competitors",
-  "research/market-analysis.md": "Market",
-  "research/tech-stack.md": "Tech stack",
-  "research/monetization.md": "Monetization",
-  "research/reddit-findings.md": "Reddit",
-  "research/features.md": "Features",
-  "research/x-findings.md": "X / Twitter",
+  "research.md": "Research",
 }
 
 function artifactLabel(key: string): string {
-  return ARTIFACT_LABELS[key] ?? key.replace(/^research\//, "").replace(/\.md$/, "")
+  return ARTIFACT_LABELS[key] ?? key.replace(/\.md$/, "")
 }
 
 export function ResearchView({
