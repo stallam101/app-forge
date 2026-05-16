@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { launchECSTask } from "@/lib/ecs"
+import { dispatchToBrev, BREV_PHASES, STUB_BLOCKER_MESSAGE } from "@/lib/agent-runner"
 import type { JobPhase } from "@/types"
 
 const PHASES: JobPhase[] = [
@@ -56,8 +56,27 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-      const taskArn = await launchECSTask(queued.id, phase, queued.projectId)
-      results.push({ phase, launched: taskArn })
+      if (BREV_PHASES.has(phase)) {
+        const { runId } = await dispatchToBrev(queued.id, phase, queued.projectId)
+        results.push({ phase, launched: runId })
+      } else {
+        // STUB phase: mark BLOCKED + emit blocker event, do NOT call Brev.
+        // Hackathon scope: GENERATION + MAINTAIN_* require user-provided tokens.
+        const stub = STUB_BLOCKER_MESSAGE[phase] ?? {
+          message: "Phase not enabled in this build",
+          required: "UNKNOWN",
+        }
+        await db.job.update({ where: { id: queued.id }, data: { status: "BLOCKED" } })
+        await db.jobEvent.create({
+          data: {
+            jobId: queued.id,
+            type: "blocker",
+            message: stub.message,
+            metadata: { required: stub.required, phase },
+          },
+        })
+        results.push({ phase, skipped: `blocked: ${stub.message}` })
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       await db.job.update({ where: { id: queued.id }, data: { status: "FAILED" } })
