@@ -48,12 +48,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<Param
       data: { status: newStatus as "COMPLETE" | "FAILED" | "BLOCKED" | "AWAITING_APPROVAL" },
     })
 
-    // When a non-ticket phase completes, create a PHASE_TRANSITION approval so the
-    // user sees it in the Approvals page and can act on it from there.
+    // When a non-ticket phase completes, create a PHASE_TRANSITION approval.
     if (type === "complete" && updated.count > 0) {
       const transition = PHASE_TRANSITIONS[job.phase]
       if (transition) {
-        // Only create if one doesn't already exist for this job
         const existing = await db.approval.findFirst({
           where: { jobId, type: "PHASE_TRANSITION", status: "PENDING" },
         })
@@ -69,6 +67,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<Param
             },
           })
         }
+      }
+    }
+
+    // When the agent sends an approval_request mid-job, create the approval row
+    // so it surfaces in the Approvals tab (without this the job sits AWAITING_APPROVAL invisibly).
+    if (type === "approval_request" && updated.count > 0) {
+      const meta = metadata as { type?: string; targetStatus?: string } | null
+      const approvalType = (meta?.type ?? "PHASE_TRANSITION") as import("@/types").ApprovalType
+      const existing = await db.approval.findFirst({
+        where: { jobId, type: approvalType, status: "PENDING" },
+      })
+      if (!existing) {
+        const transition = PHASE_TRANSITIONS[job.phase]
+        await db.approval.create({
+          data: {
+            projectId: job.projectId,
+            jobId,
+            type: approvalType,
+            title: message ?? transition?.label ?? "Approval required",
+            description: message ?? "The agent requires your approval to continue.",
+            metadata: meta?.targetStatus
+              ? { targetStatus: meta.targetStatus }
+              : transition
+              ? { targetStatus: transition.targetStatus }
+              : undefined,
+          },
+        })
       }
     }
   }

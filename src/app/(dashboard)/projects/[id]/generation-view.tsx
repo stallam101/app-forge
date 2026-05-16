@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   ArrowLeft, Lock, ChevronRight, Loader2, RefreshCw, AlertCircle,
-  CheckCircle2, PanelRight, FileText,
+  CheckCircle2, PanelRight, FileText, Clock,
 } from "lucide-react"
 import ReactMarkdown, { type Components } from "react-markdown"
 import { PhaseTimeline } from "@/components/phase-timeline"
@@ -67,6 +67,7 @@ export function GenerationView({
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const isRunning = status === "RUNNING" || status === "QUEUED"
+  const isAwaitingApproval = status === "AWAITING_APPROVAL"
   const isFailed = status === "FAILED"
   const isComplete = status === "COMPLETE"
   const noToken = !hasGithubToken && !jobId
@@ -159,7 +160,7 @@ export function GenerationView({
     }
   }
 
-  const timelineState = isComplete ? "complete" : isFailed ? "blocked" : noToken ? "blocked" : isRunning ? "running" : "idle"
+  const timelineState = isComplete ? "complete" : isAwaitingApproval ? "awaiting_approval" : isFailed ? "blocked" : noToken ? "blocked" : isRunning ? "running" : "idle"
 
   return (
     <div className="flex flex-col h-full">
@@ -174,7 +175,7 @@ export function GenerationView({
           <span className="text-[#888] text-sm">{projectName || "Untitled"}</span>
         </div>
 
-        {(isRunning || isComplete || isFailed) && (
+        {(isRunning || isAwaitingApproval || isComplete || isFailed) && (
           <button
             onClick={() => setSidebarOpen((v) => !v)}
             className={[
@@ -240,6 +241,34 @@ export function GenerationView({
                     </div>
                   ))}
                   <div ref={bottomRef} />
+                </div>
+              </div>
+            )}
+
+            {isAwaitingApproval && (
+              <div className="flex-1 flex flex-col items-center justify-center max-w-lg mx-auto w-full text-center">
+                <div className="w-12 h-12 rounded-full bg-violet-500/10 border border-violet-500/20 flex items-center justify-center mb-5">
+                  <Clock size={18} className="text-violet-400" />
+                </div>
+                <h2 className="text-white text-base font-semibold mb-2">Waiting for approval</h2>
+                <p className="text-[#888] text-sm leading-relaxed mb-8 max-w-sm">
+                  The generation agent has paused and is waiting for your sign-off. Check the Approvals tab to review and continue.
+                </p>
+                <div className="flex items-center gap-3">
+                  <Link
+                    href="/approvals"
+                    className="flex items-center gap-1.5 px-5 py-2.5 bg-white text-black text-sm font-medium rounded-lg hover:bg-[#e5e5e5] transition-colors"
+                  >
+                    View Approvals <ChevronRight size={14} />
+                  </Link>
+                  <button
+                    onClick={retry}
+                    disabled={retrying}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-[#1a1a1a] text-[#888] text-sm font-medium rounded-lg hover:border-[#333] hover:text-white disabled:opacity-40 transition-colors"
+                  >
+                    {retrying ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                    Retry instead
+                  </button>
                 </div>
               </div>
             )}
