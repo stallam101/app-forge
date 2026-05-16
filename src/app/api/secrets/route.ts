@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getCurrentUser } from "@/lib/auth"
 import { db } from "@/lib/db"
+import { encrypt } from "@/lib/secrets"
 
 export async function GET() {
-  const secrets = await db.secret.findMany()
+  const user = await getCurrentUser()
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const settings = await db.setting.findMany()
 
   // Return only key names with a flag indicating if value exists (never expose values)
-  const data = secrets.reduce<Record<string, boolean>>((acc, s) => {
-    acc[s.keyName] = true
+  const data = settings.reduce<Record<string, boolean>>((acc, s) => {
+    acc[s.key] = true
     return acc
   }, {})
 
@@ -14,16 +19,18 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const body = await request.json()
+  const user = await getCurrentUser()
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  // For hackathon: store as plain text (production would use AES-256)
-  const entries = Object.entries(body) as [string, string][]
+  const body = (await request.json()) as Record<string, string>
+  const entries = Object.entries(body)
 
   for (const [key, value] of entries) {
-    await db.secret.upsert({
-      where: { keyName: key },
-      create: { keyName: key, encryptedValue: value },
-      update: { encryptedValue: value },
+    const encryptedValue = encrypt(value)
+    await db.setting.upsert({
+      where: { key },
+      create: { key, value: encryptedValue },
+      update: { value: encryptedValue },
     })
   }
 

@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import type { ApprovalType } from "@/types"
@@ -42,16 +41,4 @@ export async function GET(req: NextRequest) {
   })
 
   return NextResponse.json(approvals)
-=======
-import { NextResponse } from "next/server"
-import { db } from "@/lib/db"
-
-export async function GET() {
-  const approvals = await db.approvalRequest.findMany({
-    where: { status: "PENDING" },
-    orderBy: { createdAt: "desc" },
-  })
-
-  return NextResponse.json({ success: true, data: approvals })
->>>>>>> 66dcf6bb2c6f4ac90238724d397c0d78437ec439
 }

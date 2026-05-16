@@ -7,21 +7,14 @@ datasource db {
   provider = "postgresql"
 }
 
-<<<<<<< HEAD
 enum ProjectStatus {
   READY
   RESEARCH
-=======
-enum Phase {
-  BACKLOG
-  IDEATION
->>>>>>> 66dcf6bb2c6f4ac90238724d397c0d78437ec439
   GENERATION
   MAINTAIN
   ARCHIVED
 }
 
-<<<<<<< HEAD
 enum JobPhase {
   TICKET_CONTEXT_BUILD
   RESEARCH
@@ -61,24 +54,6 @@ enum ApprovalType {
   DEPENDENCY_BUMP
   X_POST
   PHASE_TRANSITION
-=======
-enum JobStatus {
-  QUEUED
-  RUNNING
-  AWAITING_MESSAGE
-  AWAITING_APPROVAL
-  BLOCKED
-  FAILED
-  COMPLETE
-}
-
-enum LogLevel {
-  INFO
-  WARN
-  ERROR
-  BLOCKER
-  COMPLETE
->>>>>>> 66dcf6bb2c6f4ac90238724d397c0d78437ec439
 }
 
 enum ApprovalStatus {
@@ -87,7 +62,6 @@ enum ApprovalStatus {
   REJECTED
 }
 
-<<<<<<< HEAD
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -180,109 +154,4 @@ model Setting {
   id    String @id @default(cuid())
   key   String @unique
   value String
-=======
-model Project {
-  id          String   @id @default(uuid())
-  name        String
-  description String
-  phase       Phase    @default(BACKLOG)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  phaseJobs        PhaseJob[]
-  ideationMessages IdeationMessage[]
-  jobLogs          JobLog[]
-  artifacts        Artifact[]
-  approvalRequests ApprovalRequest[]
-
-  @@map("projects")
-}
-
-model PhaseJob {
-  id            String    @id @default(uuid())
-  projectId     String    @map("project_id")
-  phase         Phase
-  status        JobStatus @default(QUEUED)
-  blockerReason String?   @map("blocker_reason")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  completedAt   DateTime? @map("completed_at")
-
-  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  ideationMessages IdeationMessage[]
-  jobLogs          JobLog[]
-
-  @@map("phase_jobs")
-}
-
-model IdeationMessage {
-  id               String   @id @default(uuid())
-  phaseJobId       String   @map("phase_job_id")
-  projectId        String   @map("project_id")
-  role             String   // "user" | "agent"
-  content          String
-  citationsJson    String?  @map("citations_json")
-  filesWrittenJson String?  @map("files_written_json")
-  containerExitCode Int?    @map("container_exit_code")
-  createdAt        DateTime @default(now()) @map("created_at")
-
-  phaseJob PhaseJob @relation(fields: [phaseJobId], references: [id], onDelete: Cascade)
-  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@map("ideation_messages")
-}
-
-model JobLog {
-  id        String   @id @default(uuid())
-  projectId String   @map("project_id")
-  jobId     String   @map("job_id")
-  phase     Phase
-  level     LogLevel
-  message   String
-  createdAt DateTime @default(now()) @map("created_at")
-
-  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  phaseJob PhaseJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
-
-  @@map("job_logs")
-}
-
-model Artifact {
-  id        String   @id @default(uuid())
-  projectId String   @map("project_id")
-  phase     Phase
-  filePath  String   @map("file_path")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@map("artifacts")
-}
-
-model ApprovalRequest {
-  id        String         @id @default(uuid())
-  projectId String         @map("project_id")
-  phase     Phase
-  title     String
-  summary   String
-  reasoning String?
-  prUrl     String?        @map("pr_url")
-  diffPreview String?      @map("diff_preview")
-  status    ApprovalStatus @default(PENDING)
-  createdAt DateTime       @default(now()) @map("created_at")
-  resolvedAt DateTime?     @map("resolved_at")
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@map("approval_requests")
-}
-
-model Secret {
-  id             String @id @default(uuid())
-  keyName        String @unique @map("key_name")
-  encryptedValue String @map("encrypted_value")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  @@map("secrets")
->>>>>>> 66dcf6bb2c6f4ac90238724d397c0d78437ec439
 }

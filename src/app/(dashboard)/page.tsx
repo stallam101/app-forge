@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import { db } from "@/lib/db"
 import { KanbanBoard } from "@/components/dashboard/kanban-board"
 import type { ProjectSummary, JobPhase, JobStatus } from "@/types"
@@ -53,10 +52,4 @@ export default async function DashboardPage() {
   })
 
   return <KanbanBoard initialProjects={summaries} />
-=======
-import { KanbanBoard } from "@/components/kanban/board"
-
-export default function DashboardPage() {
-  return <KanbanBoard />
->>>>>>> 66dcf6bb2c6f4ac90238724d397c0d78437ec439
 }

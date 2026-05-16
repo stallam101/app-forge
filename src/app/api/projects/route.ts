@@ -1,9 +1,9 @@
-<<<<<<< HEAD
 import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { putS3Object } from "@/lib/s3"
 import type { ProjectSummary, JobPhase, JobStatus } from "@/types"
+
 export async function POST() {
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -81,52 +81,4 @@ export async function GET() {
   })
 
   return NextResponse.json(summaries)
-=======
-import { NextRequest, NextResponse } from "next/server"
-import { db } from "@/lib/db"
-import { seedProjectContext } from "@/lib/context"
-
-export async function GET() {
-  const projects = await db.project.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      phaseJobs: {
-        where: { status: { not: "COMPLETE" } },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-      },
-    },
-  })
-
-  const cards = projects.map((p) => ({
-    id: p.id,
-    name: p.name,
-    description: p.description,
-    phase: p.phase,
-    status: p.phaseJobs[0]?.status ?? null,
-    createdAt: p.createdAt.toISOString(),
-  }))
-
-  return NextResponse.json({ success: true, data: cards })
-}
-
-export async function POST(request: NextRequest) {
-  const body = await request.json()
-  const { name, description } = body
-
-  if (!name || !description) {
-    return NextResponse.json(
-      { success: false, error: "Name and description are required" },
-      { status: 400 }
-    )
-  }
-
-  const project = await db.project.create({
-    data: { name, description },
-  })
-
-  await seedProjectContext(project.id, name, description)
-
-  return NextResponse.json({ success: true, data: project }, { status: 201 })
->>>>>>> 66dcf6bb2c6f4ac90238724d397c0d78437ec439
 }
