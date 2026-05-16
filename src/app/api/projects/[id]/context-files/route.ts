@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { listS3Objects } from "@/lib/s3"
+import { listS3Objects, getS3Object } from "@/lib/s3"
 
 type Params = { id: string }
 
@@ -12,6 +12,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<Params
   const { id } = await params
   const project = await db.project.findUnique({ where: { id } })
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 })
+
+  // ?file=filename.md → return file content
+  const fileName = req.nextUrl.searchParams.get("file")
+  if (fileName) {
+    try {
+      const content = await getS3Object(`${project.s3Prefix}/${fileName}`)
+      if (content === null) return NextResponse.json({ error: "Not found" }, { status: 404 })
+      return NextResponse.json({ content })
+    } catch {
+      return NextResponse.json({ error: "Failed to fetch file" }, { status: 500 })
+    }
+  }
 
   try {
     const files = await listS3Objects(project.s3Prefix)
@@ -24,7 +36,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<Params
       }))
     )
   } catch {
-    // S3 not configured — return empty list so UI still works
     return NextResponse.json([])
   }
 }

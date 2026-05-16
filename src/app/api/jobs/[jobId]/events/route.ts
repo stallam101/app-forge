@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import type { ProjectStatus } from "@/types"
 
 type Params = { jobId: string }
 
 const TERMINAL_STATUSES = ["COMPLETE", "FAILED"] as const
+
+// What status/phase does each phase transition to on completion?
+const PHASE_TRANSITIONS: Partial<Record<string, { targetStatus: ProjectStatus; label: string }>> = {
+  RESEARCH:          { targetStatus: "GENERATION", label: "Move to Generation" },
+  GENERATION:        { targetStatus: "MAINTAIN",   label: "Move to Maintain" },
+  MAINTAIN_SEO:      { targetStatus: "MAINTAIN",   label: "Approve SEO changes" },
+  MAINTAIN_AEO:      { targetStatus: "MAINTAIN",   label: "Approve AEO changes" },
+  MAINTAIN_INCIDENT: { targetStatus: "MAINTAIN",   label: "Approve incident fix" },
+}
 
 export async function POST(req: NextRequest, { params }: { params: Promise<Params> }) {
   const { jobId } = await params
@@ -24,8 +34,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<Param
   // Map event type to job status
   let newStatus: string | undefined
   if (type === "complete") {
-    // TICKET_CONTEXT_BUILD needs no user approval — mark COMPLETE so the brief view shows
-    // All other phases wait for user to approve before moving forward
     newStatus = job.phase === "TICKET_CONTEXT_BUILD" ? "COMPLETE" : "AWAITING_APPROVAL"
   } else if (type === "error") {
     newStatus = "FAILED"
@@ -35,10 +43,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<Param
 
   if (newStatus) {
     // Guard: don't override a job already in a terminal state
-    await db.job.updateMany({
+    const updated = await db.job.updateMany({
       where: { id: jobId, status: { notIn: [...TERMINAL_STATUSES] } },
       data: { status: newStatus as "COMPLETE" | "FAILED" | "BLOCKED" | "AWAITING_APPROVAL" },
     })
+
+    // When a non-ticket phase completes, create a PHASE_TRANSITION approval so the
+    // user sees it in the Approvals page and can act on it from there.
+    if (type === "complete" && updated.count > 0) {
+      const transition = PHASE_TRANSITIONS[job.phase]
+      if (transition) {
+        // Only create if one doesn't already exist for this job
+        const existing = await db.approval.findFirst({
+          where: { jobId, type: "PHASE_TRANSITION", status: "PENDING" },
+        })
+        if (!existing) {
+          await db.approval.create({
+            data: {
+              projectId: job.projectId,
+              jobId,
+              type: "PHASE_TRANSITION",
+              title: transition.label,
+              description: `${job.phase} phase is complete. Approve to continue to the next step.`,
+              metadata: { targetStatus: transition.targetStatus },
+            },
+          })
+        }
+      }
+    }
   }
 
   return NextResponse.json({ ok: true })
