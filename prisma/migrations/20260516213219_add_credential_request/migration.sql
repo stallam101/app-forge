@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "ApprovalType" ADD VALUE 'CREDENTIAL_REQUEST';

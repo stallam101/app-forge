@@ -23,6 +23,7 @@ export type ApprovalType =
   | "DEPENDENCY_BUMP"
   | "X_POST"
   | "PHASE_TRANSITION"
+  | "CREDENTIAL_REQUEST"
 
 export interface ProjectSummary {
   id: string
