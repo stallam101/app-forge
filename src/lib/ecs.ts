@@ -61,6 +61,8 @@ export async function launchECSTask(jobId: string, phase: JobPhase, projectId: s
     { name: "AWS_ACCESS_KEY_ID", value: process.env.AWS_ACCESS_KEY_ID ?? "" },
     { name: "AWS_SECRET_ACCESS_KEY", value: process.env.AWS_SECRET_ACCESS_KEY ?? "" },
     { name: "S3_BUCKET_NAME", value: process.env.S3_BUCKET_NAME ?? "" },
+    { name: "NVIDIA_API_KEY", value: process.env.NVIDIA_API_KEY ?? "" },
+    { name: "TAVILY_API_KEY", value: process.env.TAVILY_API_KEY ?? "" },
     // Decrypted secrets from Settings table
     ...Object.entries(secrets).map(([name, value]) => ({ name, value })),
   ]
