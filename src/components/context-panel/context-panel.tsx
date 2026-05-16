@@ -120,7 +120,7 @@ export function ContextPanel({ projectId }: ContextPanelProps) {
   }
 
   return (
-    <div className="w-[280px] flex-none border-l border-[#1a1a1a] flex flex-col font-sans">
+    <div className="w-[280px] flex-none border-l border-[#1a1a1a] flex flex-col" style={{ fontFamily: "var(--font-geist-sans), system-ui, sans-serif" }}>
       {/* Header */}
       <div className="px-4 py-3 border-b border-[#1a1a1a] flex items-center gap-2 flex-none">
         {selectedFile && (

@@ -170,7 +170,7 @@ export function ProjectBriefView({
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden rounded-lg border border-[#1a1a1a]">
         {/* Brief panel */}
-        <div className="w-1/2 flex-none border-r border-[#1a1a1a] overflow-y-auto p-6 font-sans">
+        <div className="w-1/2 flex-none border-r border-[#1a1a1a] overflow-y-auto p-6" style={{ fontFamily: "var(--font-geist-sans), system-ui, sans-serif" }}>
           <ReactMarkdown components={mdComponents}>{brief}</ReactMarkdown>
         </div>
 
