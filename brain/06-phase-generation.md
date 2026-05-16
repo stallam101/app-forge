@@ -15,6 +15,7 @@ Build, test, and deploy the application described in ideation artifacts. Creates
 - `ideation/tech-stack.md` — stack rationale before writing any code
 - `ideation/features.md` — full feature list to implement
 - `ideation/product-brief.md` — if unclear on product intent during implementation
+- `ideation/conversation.md` — full ideation chat history if origin/intent needs deeper context (the conversation captures the WHY behind every decision in product-brief.md)
 - Any other ideation files as needed
 
 ## Execution Flow

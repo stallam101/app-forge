@@ -27,10 +27,13 @@ No prescribed structure. Agent writes what's useful for the project. Examples:
 
 ```
 ideation/
+  conversation.md           ← AppForge-managed (see below), not agent-written
   market-research.md
   competitors.md
+  niches.md
   tech-stack.md             ← links to features.md where stack choice depends on a feature
   features.md
+  product-brief.md
   monetization.md
 known-issues.md              ← living file, created by generation, maintained by maintain
 generation/
@@ -46,6 +49,47 @@ user-research/              ← social app might need this
 ```
 
 Agent decides what to create. A fintech app context looks different from a social app context.
+
+## ideation/conversation.md — AppForge-managed
+
+Ideation is the only interactive phase. The conversation between user and agent is stored as a Postgres-backed list of messages (source of truth for UI + SSE) and serialized into `ideation/conversation.md` in S3 before every container spin. The ideation agent **reads** this file each turn but does **not write to it directly** — AppForge owns it.
+
+Format:
+
+```markdown
+# {Project Name} — Ideation Conversation
+
+---
+turn: 1
+role: agent
+date: 2026-05-15T12:42:00Z
+files_written:
+  - ideation/market-research.md (initial sweep)
+citations:
+  - https://reddit.com/r/freelance/comments/...
+---
+Brief acknowledgment: budgeting for freelancers, focus on cash flow visibility.
+Initial sweep shows three subreddit pain points...
+
+Questions:
+1. Are you targeting solo freelancers or agencies (1–10 people)?
+2. ...
+
+---
+turn: 2
+role: user
+date: 2026-05-15T12:50:00Z
+---
+Solo freelancers, mostly creatives. Invoice payment delays are the #1 complaint.
+
+---
+turn: 3
+role: agent
+...
+---
+```
+
+Every other file under `ideation/` is agent-written and follows normal Context Engine conventions.
 
 ## project-context.md (front page)
 

@@ -36,6 +36,32 @@ message     text
 created_at  timestamptz default now()
 ```
 
+## Ideation Turn Lifecycle (per user message)
+
+Ideation differs from the other phases — each user message spins a fresh container for one reply. See `05-phase-ideation.md` for full conversation flow.
+
+```
+1. User types in Chat Panel, clicks Send
+2. POST /api/projects/[id]/ideation/message
+   a. Append user message to ideation_messages (Postgres)
+   b. Re-serialize full conversation → ideation/conversation.md in S3
+   c. Enqueue ideation-turn job in BullMQ (linked to the open phase_job row)
+   d. Flip phase_job.status: awaiting_message → running
+3. BullMQ worker triggers ECS RunTask (ideation task definition)
+4. Container runs one turn (research + reply), writes files, exits
+5. Worker reads agent reply from job_logs (structured event), appends to ideation_messages
+6. AppForge re-serializes conversation.md (now includes new reply)
+7. phase_job.status → awaiting_message (until next user message or finalization)
+8. SSE pushes agent_reply event → chat panel renders message + file chips
+
+On finalization turn:
+- Container writes the full artifact set, rewrites project-context.md
+- Exits with a `finalize` event in job_logs
+- phase_job.status → complete → card moves to `awaiting approval`
+```
+
+Generation and Maintain follow the autonomous one-shot lifecycle below.
+
 ## Container Lifecycle (detailed)
 
 ```
@@ -101,30 +127,35 @@ On user resolution:
 src/
   app/
     (dashboard)/
-      page.tsx              ← kanban board
-      approvals/page.tsx    ← approval inbox
-      settings/page.tsx     ← API keys, platform config
+      page.tsx                      ← kanban board
+      projects/[id]/chat/page.tsx   ← ideation chat panel
+      approvals/page.tsx            ← approval inbox
+      settings/page.tsx             ← API keys, platform config
     api/
       projects/
-        route.ts            ← GET list, POST create
+        route.ts                    ← GET list, POST create
         [id]/
-          route.ts          ← GET, PATCH, DELETE
-          stream/route.ts   ← SSE endpoint
-          approve/route.ts  ← phase transition approval
-          resolve/route.ts  ← blocker resolution
+          route.ts                  ← GET, PATCH, DELETE
+          stream/route.ts           ← SSE endpoint
+          approve/route.ts          ← phase transition approval
+          resolve/route.ts          ← blocker resolution
+          ideation/
+            message/route.ts        ← POST user message → enqueue turn
+            finalize/route.ts       ← POST finalize → enqueue finalization turn
       webhooks/
-        pagerdury/route.ts  ← incoming PagerDuty events
+        pagerduty/route.ts          ← incoming PagerDuty events
       auth/
-        route.ts            ← login, session
+        route.ts                    ← login, session
   lib/
-    db.ts                   ← Prisma singleton
-    queue.ts                ← BullMQ queues + workers
-    s3.ts                   ← S3 client + helpers
-    ecs.ts                  ← ECS RunTask wrapper
-    secrets.ts              ← encrypt/decrypt helpers
-    sse.ts                  ← SSE response helpers
+    db.ts                           ← Prisma singleton
+    queue.ts                        ← BullMQ queues + workers
+    s3.ts                           ← S3 client + helpers
+    ecs.ts                          ← ECS RunTask wrapper
+    secrets.ts                      ← encrypt/decrypt helpers
+    sse.ts                          ← SSE response helpers
+    conversation.ts                 ← serialize ideation_messages → conversation.md
   types/
-    index.ts                ← shared types
+    index.ts                        ← shared types
 ```
 
 ## Auth

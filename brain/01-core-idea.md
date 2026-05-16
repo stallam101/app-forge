@@ -12,8 +12,8 @@ Building and maintaining software requires constant context-switching: research,
 
 ## Phases
 
-### 1. Ideation
-Agent researches the market. Pulls Reddit threads, X posts, competitor analysis. Produces: target audience, competitors, monetization model, tech stack recommendation, feature list. Adapts research depth to input specificity — vague brief → broad market sweep, specific brief → gap-filling only.
+### 1. Ideation (interactive — the only conversational phase)
+User starts a back-and-forth conversation with the agent. User gives a one-line idea; the agent does an initial market sweep, asks clarifying questions, presents niche options, and validates assumptions across multiple turns. Each user message triggers a fresh research-capable container — Reddit, X, web search — that updates the project's wiki and replies. The conversation ends when either party signals "finalize." Final output: target audience, niche, competitors, monetization model, tech stack, feature list. After user approval, the project is handed off to Generation.
 
 ### 2. Generation
 Agent builds the app. Creates GitHub repo, writes code, runs tests, starts dev servers, pushes commits, deploys to Vercel via GitHub integration. Constrained to what Vercel can host (see platform constraints). Produces: live deployed app, GitHub repo, test report.
@@ -23,8 +23,8 @@ Agent runs on cron. Audits SEO, generates AEO content, monitors production via P
 
 ## Core Principles
 
-- **Minimal user input.** Agent infers everything it can.
-- **User approves, agent executes.** Phase transitions require human sign-off. Execution is autonomous.
+- **Ideation is a dialogue. Everything after is autonomous.** The user converses with the agent only during Ideation, to shape the idea and pick the niche. Generation and Maintain run hands-off — user is pinged only for blockers and approvals.
+- **User approves, agent executes.** Phase transitions require human sign-off. Execution is autonomous within a phase.
 - **Transparent.** Every agent action is cited. PRs are linked. Reasoning is visible.
 - **Platform-aware.** Agents know the hosting platform's constraints before they plan or build.
-- **Adaptive.** More context from user = less research by agent. Less context = broader sweep.
+- **Adaptive research depth.** During Ideation, the agent goes broad on vague turns and gap-fills on specific ones. Across phases, more user-provided context = less agent research.
