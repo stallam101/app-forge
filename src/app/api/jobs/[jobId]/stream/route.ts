@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { db } from "@/lib/db"
+import { isECSTaskStopped } from "@/lib/ecs"
 
 type Params = { jobId: string }
 
@@ -38,6 +39,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<Params
           send({ type: "complete", message: "Done" })
           controller.close()
           return
+        }
+
+        // Detect crashed container: task stopped but job never posted a terminal event
+        if (currentJob?.status === "RUNNING" && currentJob.ecsTaskArn) {
+          const stopped = await isECSTaskStopped(currentJob.ecsTaskArn)
+          if (stopped) {
+            await db.job.update({ where: { id: jobId }, data: { status: "FAILED" } })
+            await db.jobEvent.create({
+              data: { jobId, type: "error", message: "Project creation failed — container exited unexpectedly" },
+            })
+            send({ type: "error", message: "Project creation failed — container exited unexpectedly" })
+            controller.close()
+            return
+          }
         }
 
         const events = await db.jobEvent.findMany({

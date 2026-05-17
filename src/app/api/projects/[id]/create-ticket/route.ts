@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { putS3Object } from "@/lib/s3"
-import { launchGatewayJob } from "@/lib/gateway"
+import { launchECSTask } from "@/lib/ecs"
 
 type Params = { id: string }
 
@@ -34,7 +34,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<Para
   })
 
   // Launch immediately — no cron needed
-  void launchGatewayJob(job.id, "TICKET_CONTEXT_BUILD", id).catch(async (err) => {
+  void launchECSTask(job.id, "TICKET_CONTEXT_BUILD", id).catch(async (err) => {
     await db.job.update({ where: { id: job.id }, data: { status: "FAILED" } })
     await db.jobEvent.create({
       data: { jobId: job.id, type: "error", message: String(err) },
