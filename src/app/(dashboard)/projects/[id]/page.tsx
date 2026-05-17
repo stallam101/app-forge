@@ -152,10 +152,15 @@ async function renderGeneration(project: ProjectWithMessages) {
     db.job.findFirst({
       where: { projectId: project.id, phase: "GENERATION" },
       orderBy: { createdAt: "desc" },
-      include: { events: { orderBy: { createdAt: "desc" }, take: 1 } },
+      include: { events: { orderBy: { createdAt: "asc" }, take: 200 } },
     }),
     db.setting.findUnique({ where: { key: "GITHUB_TOKEN" } }),
   ])
+
+  const initialEvents = (job?.events ?? []).map((e) => ({
+    type: e.type,
+    message: e.message,
+  }))
 
   return (
     <GenerationView
@@ -163,6 +168,7 @@ async function renderGeneration(project: ProjectWithMessages) {
       projectName={project.name}
       jobId={job?.id ?? null}
       jobStatus={(job?.status ?? null) as import("@/types").JobStatus | null}
+      initialEvents={initialEvents}
       hasGithubToken={!!ghSetting}
     />
   )

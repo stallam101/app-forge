@@ -36,6 +36,7 @@ interface GenerationViewProps {
   projectName: string
   jobId: string | null
   jobStatus: JobStatus | null
+  initialEvents?: { type: string; message: string }[]
   hasGithubToken: boolean
 }
 
@@ -141,10 +142,11 @@ export function GenerationView({
   projectName,
   jobId,
   jobStatus: initialStatus,
+  initialEvents = [],
   hasGithubToken,
 }: GenerationViewProps) {
   const router = useRouter()
-  const [events, setEvents] = useState<ProgressEvent[]>([])
+  const [events, setEvents] = useState<ProgressEvent[]>(initialEvents)
   const [status, setStatus] = useState<JobStatus | null>(initialStatus)
   const [retrying, setRetrying] = useState(false)
   const [files, setFiles] = useState<FileEntry[]>([])
