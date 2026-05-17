@@ -19,6 +19,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<Param
 
   await db.project.update({ where: { id }, data: { status } })
 
+  // Resolve any pending PHASE_TRANSITION approvals — they're stale once we've moved
+  await db.approval.updateMany({
+    where: { projectId: id, type: "PHASE_TRANSITION", status: "PENDING" },
+    data: { status: "APPROVED", resolvedAt: new Date() },
+  })
+
   const phase = STATUS_TO_PHASE[status]
   if (phase) {
     const job = await db.job.create({

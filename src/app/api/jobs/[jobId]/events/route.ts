@@ -53,7 +53,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<Param
       const transition = PHASE_TRANSITIONS[job.phase]
       if (transition) {
         const existing = await db.approval.findFirst({
-          where: { jobId, type: "PHASE_TRANSITION", status: "PENDING" },
+          where: { projectId: job.projectId, type: "PHASE_TRANSITION", status: "PENDING" },
         })
         if (!existing) {
           await db.approval.create({
