@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useTransition, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { CheckCircle2, XCircle, Inbox } from "lucide-react"
 import type { ApprovalCardData, ApprovalType } from "@/types"
@@ -44,13 +43,13 @@ interface ApprovalListProps {
 
 
 export function ApprovalList({ initial }: ApprovalListProps) {
-  const router = useRouter()
   const [cards, setCards] = useState<ApprovalCardData[]>(initial)
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [, startTransition] = useTransition()
+  // Track locally resolved IDs so polls don't restore them before the DB catches up
+  const resolvedIds = useRef<Set<string>>(new Set())
 
-  // Poll for new approvals every 10s
+  // Poll for new approvals every 5s
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
@@ -66,26 +65,28 @@ export function ApprovalList({ initial }: ApprovalListProps) {
           createdAt: string
         }>
         setCards(
-          data.map((a) => ({
-            id: a.id,
-            projectId: a.projectId,
-            projectName: a.project.name,
-            title: a.title,
-            description: a.description,
-            type: a.type,
-            createdAt: a.createdAt,
-          }))
+          data
+            .filter((a) => !resolvedIds.current.has(a.id))
+            .map((a) => ({
+              id: a.id,
+              projectId: a.projectId,
+              projectName: a.project.name,
+              title: a.title,
+              description: a.description,
+              type: a.type,
+              createdAt: a.createdAt,
+            }))
         )
       } catch {
         // swallow
       }
-    }, 10000)
+    }, 5000)
     return () => clearInterval(interval)
   }, [])
 
   function handleResolved(id: string) {
+    resolvedIds.current.add(id)
     setCards((prev) => prev.filter((c) => c.id !== id))
-    startTransition(() => router.refresh())
   }
 
   async function resolve(id: string, status: "APPROVED" | "REJECTED") {
