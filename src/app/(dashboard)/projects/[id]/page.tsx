@@ -163,7 +163,6 @@ async function renderGeneration(project: ProjectWithMessages) {
       projectName={project.name}
       jobId={job?.id ?? null}
       jobStatus={(job?.status ?? null) as import("@/types").JobStatus | null}
-      errorMessage={job?.events[0]?.message}
       hasGithubToken={!!ghSetting}
     />
   )
