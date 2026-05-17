@@ -24,7 +24,10 @@ export default async function DashboardPage() {
   })
 
   const summaries: ProjectSummary[] = projects.map((p) => {
-    const activeJob = p.jobs.find((j) => (ACTIVE_STATUSES as readonly string[]).includes(j.status))
+    const activeJob = p.jobs.find((j) =>
+      (ACTIVE_STATUSES as readonly string[]).includes(j.status) &&
+      !(j.phase === "TICKET_CONTEXT_BUILD" && p.status !== "READY")
+    )
     const ideationComplete = p.jobs.some(
       (j) => j.phase === "TICKET_CONTEXT_BUILD" && j.status === "COMPLETE"
     )

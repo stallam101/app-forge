@@ -61,9 +61,16 @@ export async function GET() {
   })
 
   const summaries: ProjectSummary[] = projects.map((p) => {
-    const activeJob = p.jobs.find((j) => (ACTIVE_STATUSES as readonly string[]).includes(j.status))
+    const activeJob = p.jobs.find((j) =>
+      (ACTIVE_STATUSES as readonly string[]).includes(j.status) &&
+      !(j.phase === "TICKET_CONTEXT_BUILD" && p.status !== "READY")
+    )
     // If no in-flight job, surface the most recent COMPLETE job so the UI knows the phase finished
-    const displayJob = activeJob ?? p.jobs.find((j) => j.status === "COMPLETE")
+    // Skip TICKET_CONTEXT_BUILD COMPLETE jobs when project has moved past READY
+    const displayJob = activeJob ?? p.jobs.find((j) =>
+      j.status === "COMPLETE" &&
+      !(j.phase === "TICKET_CONTEXT_BUILD" && p.status !== "READY")
+    )
     const ideationComplete = p.jobs.some(
       (j) => j.phase === "TICKET_CONTEXT_BUILD" && j.status === "COMPLETE"
     )

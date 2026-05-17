@@ -1,34 +1,29 @@
-name: Build & Push Agent Image
+name: Validate Brev Scripts
 
 on:
   push:
     branches: [main]
     paths:
-      - Dockerfile
       - scripts/**
       - configs/**
   workflow_dispatch:
 
 jobs:
-  build:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          node-version: 22
 
-      - name: Login to ECR
-        uses: aws-actions/amazon-ecr-login@v2
+      - name: Syntax check dispatch server
+        run: node --check scripts/brev-dispatch-server.js
 
-      - name: Build and push (linux/amd64)
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: linux/amd64
-          push: true
-          tags: 517725157271.dkr.ecr.us-east-1.amazonaws.com/appforge-agent:latest
+      - name: Lint setup script
+        run: bash -n scripts/brev-setup.sh
+
+      - name: Lint entrypoint
+        run: bash -n scripts/agent-entrypoint.sh

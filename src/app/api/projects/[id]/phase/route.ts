@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { launchECSTask } from "@/lib/ecs"
+import { launchGatewayJob } from "@/lib/gateway"
 import { STATUS_TO_PHASE } from "@/lib/phase"
 import type { ProjectStatus, JobPhase } from "@/types"
 
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<Param
     })
 
     // Launch immediately — no cron needed
-    void launchECSTask(job.id, phase as JobPhase, id).catch(async (err) => {
+    void launchGatewayJob(job.id, phase as JobPhase, id).catch(async (err) => {
       await db.job.update({ where: { id: job.id }, data: { status: "FAILED" } })
       await db.jobEvent.create({
         data: { jobId: job.id, type: "error", message: String(err) },

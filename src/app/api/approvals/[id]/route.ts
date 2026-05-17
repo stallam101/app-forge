@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { encrypt } from "@/lib/secrets"
-import { launchECSTask } from "@/lib/ecs"
+import { launchGatewayJob } from "@/lib/gateway"
 import { STATUS_TO_PHASE } from "@/lib/phase"
 import type { ApprovalStatus, ProjectStatus, JobPhase } from "@/types"
 
@@ -44,7 +44,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<Para
             })
             // Launch immediately — fire and forget after transaction commits
             void Promise.resolve().then(() =>
-              launchECSTask(newJob.id, phase as JobPhase, approval.projectId).catch(async (err) => {
+              launchGatewayJob(newJob.id, phase as JobPhase, approval.projectId).catch(async (err) => {
                 await db.job.update({ where: { id: newJob.id }, data: { status: "FAILED" } })
                 await db.jobEvent.create({ data: { jobId: newJob.id, type: "error", message: String(err) } })
               })
