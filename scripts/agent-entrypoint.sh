@@ -4,7 +4,6 @@ set -e
 mkdir -p /workspace/context
 
 # Always send complete or error event when the script exits, regardless of what the agent did.
-# The events route guards against overriding an already-terminal status, so double-posting is safe.
 _cleanup() {
   local code=$?
   aws s3 sync /workspace/context/ "s3://$S3_BUCKET_NAME/$S3_PREFIX/" --quiet 2>/dev/null || true
@@ -25,7 +24,7 @@ trap _cleanup EXIT
 # Sync S3 context files to local workspace
 aws s3 sync "s3://$S3_BUCKET_NAME/$S3_PREFIX/" /workspace/context/ --quiet
 
-# Configure NVIDIA NIM as the model provider
+# ── Model config ─────────────────────────────────────────────────────────────
 openclaw config patch --stdin <<EOF
 {
   "models": {
@@ -51,15 +50,28 @@ openclaw config patch --stdin <<EOF
 }
 EOF
 
-# Always: filesystem MCP + bash MCP (for progress curl callbacks)
+# ── Base MCPs (all phases) ───────────────────────────────────────────────────
+# filesystem: read/write to /workspace/context (mirrored to S3 on exit)
 openclaw mcp set filesystem '{"command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","/workspace/context"]}'
-openclaw mcp set bash '{"command":"npx","args":["-y","mcp-shell"]}'
+# bash: run shell commands (curl, aws, npx, etc.)
+openclaw mcp set bash '{"command":"npx","args":["-y","mcp-server-commands"]}'
 
-# Research phase: also add Tavily for web search
+# ── Phase-specific MCPs ──────────────────────────────────────────────────────
+
 if [ "$PHASE" = "RESEARCH" ]; then
   openclaw mcp set tavily "{\"command\":\"npx\",\"args\":[\"-y\",\"tavily-mcp\"],\"env\":{\"TAVILY_API_KEY\":\"$TAVILY_API_KEY\"}}"
 fi
 
-# Write prompt and run agent (S3 sync happens in _cleanup trap on exit)
+if [ "$PHASE" = "GENERATION" ] || [[ "$PHASE" == MAINTAIN_* ]]; then
+  # GitHub MCP: repo creation, file commits, PRs
+  openclaw mcp set github "{\"command\":\"npx\",\"args\":[\"-y\",\"@modelcontextprotocol/server-github\"],\"env\":{\"GITHUB_PERSONAL_ACCESS_TOKEN\":\"$GITHUB_TOKEN\"}}"
+fi
+
+# ── Run agent ────────────────────────────────────────────────────────────────
 printf '%s' "$AGENT_PROMPT" > /workspace/prompt.md
+
+echo "[appforge] Phase=$PHASE JobId=$JOB_ID"
+echo "[appforge] MCP servers configured:"
+openclaw mcp list 2>/dev/null || true
+
 openclaw agent --local --session-id "$JOB_ID" --message "$(cat /workspace/prompt.md)"
